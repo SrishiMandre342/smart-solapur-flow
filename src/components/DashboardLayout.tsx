@@ -4,10 +4,8 @@ import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { 
-  Menu, 
   LogOut, 
   MapPin, 
-  LayoutDashboard, 
   Settings,
   User,
   Bell
@@ -41,22 +39,25 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, title }) =>
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Top Navigation */}
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between">
-          {/* Logo */}
+    <div className="w-full min-h-screen flex flex-col bg-background">
+      
+      {/* NAVBAR */}
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur">
+        <div className="flex justify-between items-center px-6 h-16">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg gradient-primary flex items-center justify-center">
               <MapPin className="w-5 h-5 text-primary-foreground" />
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-lg font-semibold text-foreground">SmartFlow Solapur</h1>
-              <p className="text-xs text-muted-foreground capitalize">{user?.role} Dashboard</p>
+              <h1 className="text-lg font-semibold text-foreground">
+                SmartFlow Solapur
+              </h1>
+              <p className="text-xs text-muted-foreground capitalize">
+                {user?.role} Dashboard
+              </p>
             </div>
           </div>
 
-          {/* Right section */}
           <div className="flex items-center gap-4">
             {/* Notifications */}
             <Button variant="ghost" size="icon" className="relative">
@@ -64,7 +65,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, title }) =>
               <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
             </Button>
 
-            {/* User Menu */}
+            {/* Profile Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="flex items-center gap-2">
@@ -73,7 +74,9 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, title }) =>
                       {user?.name ? getInitials(user.name) : 'U'}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="hidden md:block text-sm font-medium">{user?.name}</span>
+                  <span className="hidden md:block text-sm font-medium">
+                    {user?.name}
+                  </span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
@@ -85,17 +88,17 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, title }) =>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
-                  <User className="w-4 h-4 mr-2" />
-                  Profile
+                  <User className="w-4 h-4 mr-2" /> Profile
                 </DropdownMenuItem>
                 <DropdownMenuItem>
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
+                  <Settings className="w-4 h-4 mr-2" /> Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-destructive">
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Log out
+                <DropdownMenuItem 
+                  onClick={handleLogout}
+                  className="text-destructive"
+                >
+                  <LogOut className="w-4 h-4 mr-2" /> Log out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -103,12 +106,13 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, title }) =>
         </div>
       </header>
 
-      {/* Page Content */}
-      <main className="container py-6">
+      {/* MAIN CONTENT */}
+      <main className="flex-1 w-full px-6 py-6 overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
+          className="w-full max-w-[1600px] mx-auto"
         >
           <h2 className="text-2xl font-bold text-foreground mb-6">{title}</h2>
           {children}
