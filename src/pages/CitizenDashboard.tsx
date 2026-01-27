@@ -1,255 +1,211 @@
-import React, { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import DashboardLayout from '@/components/DashboardLayout';
-import CityMap from '@/components/CityMap';
-import StatCard from '@/components/StatCard';
-import LocationSelector from '@/components/LocationSelector';
-import BookingModal from '@/components/BookingModal';
-import MyBookings from '@/components/MyBookings';
-import NearbyParkingList from '@/components/NearbyParkingList';
-import RouteDisplay from '@/components/RouteDisplay';
-import { 
-  parkingZones, 
-  trafficZones, 
-  getTotalStats,
-  ParkingZone,
-  SOLAPUR_CENTER
-} from '@/data/mockData';
-import { SolapurLocation, getDistance } from '@/data/locations';
-import { Booking } from '@/data/bookings';
-import { useAuth } from '@/contexts/AuthContext';
-import { 
-  MapPin, 
-  Car, 
-  Clock, 
-  AlertTriangle,
-} from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import React, { useEffect, useState, useMemo } from "react";
+import { motion } from "framer-motion";
+import DashboardLayout from "@/components/DashboardLayout";
+import CityMap from "@/components/CityMap";
+import StatCard from "@/components/StatCard";
+import LocationSelector from "@/components/LocationSelector";
+import BookingModal from "@/components/BookingModal";
+import MyBookings from "@/components/MyBookings";
+import NearbyParkingList from "@/components/NearbyParkingList";
+import RouteDisplay from "@/components/RouteDisplay";
+
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+
+import { db } from "@/firebase/firebase";
+import {
+  collection,
+  onSnapshot,
+  query,
+  where,
+  orderBy
+} from "firebase/firestore";
+
+import { MapPin, Car, Clock, AlertTriangle } from "lucide-react";
+
+type ParkingZone = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  totalSlots: number;
+  availableSlots: number;
+  pricePerHour: number;
+};
+
+type Booking = {
+  id: string;
+  zoneId: string;
+  zoneName: string;
+  amount: number;
+  startTime: any;
+  endTime: any;
+  status: string;
+};
 
 const CitizenDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<SolapurLocation | null>(null);
-  const [isLocating, setIsLocating] = useState(false);
-  const [selectedZone, setSelectedZone] = useState<ParkingZone | null>(null);
-  const [showBookingModal, setShowBookingModal] = useState(false);
-  const [myBookings, setMyBookings] = useState<Booking[]>([]);
-  const [navigatingToZone, setNavigatingToZone] = useState<ParkingZone | null>(null);
   const { toast } = useToast();
 
-  const stats = getTotalStats();
+  const [parkingZones, setParkingZones] = useState<ParkingZone[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [selectedZone, setSelectedZone] = useState<ParkingZone | null>(null);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [routeInfo, setRouteInfo] = useState<any>(null);
+
   const RADIUS_KM = 2.5;
 
-  // Get effective location for map centering
-  const effectiveLocation = useMemo(() => {
-    if (selectedLocation) {
-      return { lat: selectedLocation.lat, lng: selectedLocation.lng };
-    }
-    return userLocation;
-  }, [selectedLocation, userLocation]);
-
-  // Filter parking zones within radius
-  const nearbyParkingZones = useMemo(() => {
-    if (!effectiveLocation) return parkingZones.slice(0, 6);
-    
-    return parkingZones
-      .map((zone) => ({
-        ...zone,
-        distance: getDistance(effectiveLocation.lat, effectiveLocation.lng, zone.lat, zone.lng),
-      }))
-      .filter((zone) => zone.distance <= RADIUS_KM)
-      .sort((a, b) => a.distance - b.distance);
-  }, [effectiveLocation]);
-
-  // Filter traffic zones within radius
-  const nearbyTrafficZones = useMemo(() => {
-    if (!effectiveLocation) return trafficZones;
-    
-    return trafficZones.filter((zone) => {
-      const distance = getDistance(effectiveLocation.lat, effectiveLocation.lng, zone.lat, zone.lng);
-      return distance <= RADIUS_KM * 1.5;
+  // --- LIVE PARKING DATA ---
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "parking_zones"), (snap) => {
+      setParkingZones(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ParkingZone)));
     });
-  }, [effectiveLocation]);
+    return unsub;
+  }, []);
 
-  // Calculate route info
-  const routeInfo = useMemo(() => {
-    if (!effectiveLocation || !navigatingToZone) return null;
-
-    const distance = getDistance(
-      effectiveLocation.lat,
-      effectiveLocation.lng,
-      navigatingToZone.lat,
-      navigatingToZone.lng
+  // --- USER BOOKINGS LIVE ---
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(
+      query(collection(db, "bookings"), where("userId", "==", user.uid), orderBy("startTime", "desc")),
+      (snap) => {
+        setBookings(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Booking)));
+      }
     );
+    return unsub;
+  }, [user]);
 
-    // Determine congestion based on traffic zones along path
-    const nearbyTraffic = trafficZones.filter((tz) => {
-      const d = getDistance(effectiveLocation.lat, effectiveLocation.lng, tz.lat, tz.lng);
-      return d <= distance;
-    });
-    
-    const hasHighCongestion = nearbyTraffic.some((t) => t.congestionLevel === 'high');
-    const hasModerate = nearbyTraffic.some((t) => t.congestionLevel === 'moderate');
-    const congestion: 'low' | 'moderate' | 'high' = hasHighCongestion
-      ? 'high'
-      : hasModerate
-      ? 'moderate'
-      : 'low';
-
-    const speed = congestion === 'high' ? 15 : congestion === 'moderate' ? 25 : 40;
-    const eta = Math.ceil((distance / speed) * 60);
-
-    return {
-      distance,
-      eta,
-      congestion,
-      destinationName: navigatingToZone.name,
-      path: [
-        [effectiveLocation.lat, effectiveLocation.lng] as [number, number],
-        [navigatingToZone.lat, navigatingToZone.lng] as [number, number],
-      ],
-    };
-  }, [effectiveLocation, navigatingToZone]);
-
+  // --- DETECT USER LOCATION (SIMULATED) ---
   const detectLocation = () => {
-    setIsLocating(true);
-    
-    if ('geolocation' in navigator) {
+    if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         () => {
-          // Simulate location within Solapur
           setUserLocation({
-            lat: SOLAPUR_CENTER.lat + (Math.random() - 0.5) * 0.01,
-            lng: SOLAPUR_CENTER.lng + (Math.random() - 0.5) * 0.01,
+            lat: 17.6599 + (Math.random() - 0.5) * 0.01,
+            lng: 75.9064 + (Math.random() - 0.5) * 0.01,
           });
-          setSelectedLocation(null);
-          setIsLocating(false);
-          toast({
-            title: "Location detected",
-            description: "Showing parking zones within 2.5 km radius",
-          });
+          toast({ title: "Location detected", description: "Nearby parking shown" });
         },
         () => {
-          setUserLocation({ lat: SOLAPUR_CENTER.lat, lng: SOLAPUR_CENTER.lng });
-          setSelectedLocation(null);
-          setIsLocating(false);
-        },
-        { enableHighAccuracy: true, timeout: 5000 }
+          setUserLocation({ lat: 17.6599, lng: 75.9064 });
+        }
       );
     } else {
-      setUserLocation({ lat: SOLAPUR_CENTER.lat, lng: SOLAPUR_CENTER.lng });
-      setSelectedLocation(null);
-      setIsLocating(false);
+      setUserLocation({ lat: 17.6599, lng: 75.9064 });
     }
   };
 
-  const handleSelectLocation = (location: SolapurLocation | null) => {
-    setSelectedLocation(location);
-    setNavigatingToZone(null);
-    if (location) {
-      setUserLocation({ lat: location.lat, lng: location.lng });
-    }
+  // --- DISTANCE UTILITY ---
+  const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) *
+        Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
-  const handleSelectParkingZone = (zone: ParkingZone) => {
+  // --- NEARBY PARKING FILTER ---
+  const nearbyParking = useMemo(() => {
+    if (!userLocation) return [];
+    return parkingZones
+      .map((z) => ({
+        ...z,
+        distance: getDistance(userLocation.lat, userLocation.lng, z.lat, z.lng)
+      }))
+      .filter((z) => z.distance <= RADIUS_KM)
+      .sort((a, b) => a.distance - b.distance);
+  }, [userLocation, parkingZones]);
+
+  // --- SIMPLE ROUTE + ETA ---
+  const handleNavigate = (zone: ParkingZone) => {
+    if (!userLocation) return;
+
+    const distance = getDistance(
+      userLocation.lat,
+      userLocation.lng,
+      zone.lat,
+      zone.lng
+    );
+
+    const speed = 30; // km/h
+    const eta = Math.ceil((distance / speed) * 60);
+
+    setRouteInfo({
+      destinationName: zone.name,
+      distance,
+      eta,
+      path: [
+        [userLocation.lat, userLocation.lng],
+        [zone.lat, zone.lng]
+      ]
+    });
+  };
+
+  const handleSelectParking = (zone: ParkingZone) => {
     setSelectedZone(zone);
     setShowBookingModal(true);
   };
 
-  const handleNavigate = (zone: ParkingZone) => {
-    setNavigatingToZone(zone);
-    toast({
-      title: "Route calculated",
-      description: `Showing route to ${zone.name}`,
-    });
-  };
-
-  const handleConfirmBooking = (booking: Booking) => {
-    setMyBookings((prev) => [booking, ...prev]);
-    setShowBookingModal(false);
-    setSelectedZone(null);
-    setNavigatingToZone(null);
-    toast({
-      title: "Booking Confirmed!",
-      description: `Your parking at ${booking.zoneName} has been booked.`,
-    });
+  const stats = {
+    totalSlots: parkingZones.reduce((a, z) => a + z.totalSlots, 0),
+    availableSlots: parkingZones.reduce((a, z) => a + z.availableSlots, 0),
+    totalZones: parkingZones.length,
+    avgPsi: 0
   };
 
   return (
     <DashboardLayout title="Citizen Dashboard">
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Available Slots" value={stats.availableSlots} subtitle={`of ${stats.totalSlots} total`} icon={Car} variant="success" />
-        <StatCard title="Parking Zones" value={stats.totalZones} subtitle="Across city" icon={MapPin} variant="primary" />
-        <StatCard title="Avg. Occupancy" value={`${stats.occupancy}%`} subtitle="City-wide" icon={Clock} variant={stats.occupancy > 70 ? 'warning' : 'default'} />
-        <StatCard title="Avg. PSI" value={`${stats.avgPsi}%`} subtitle="Parking Stress" icon={AlertTriangle} variant={stats.avgPsi > 60 ? 'warning' : 'default'} />
-      </div>
-
-      {/* Location Selector */}
-      <div className="mb-6">
-        <LocationSelector
-          selectedLocation={selectedLocation}
-          userLocation={userLocation}
-          isLocating={isLocating}
-          onSelectLocation={handleSelectLocation}
-          onDetectLocation={detectLocation}
-        />
-      </div>
-
-      {/* Route Display */}
-      {routeInfo && (
-        <div className="mb-6">
-          <RouteDisplay routeInfo={routeInfo} />
+      <motion.div className="space-y-6">
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard title="Available Slots" value={stats.availableSlots} icon={Car} variant="success" />
+          <StatCard title="Parking Zones" value={stats.totalZones} icon={MapPin} variant="primary" />
+          <StatCard title="Avg. Occupancy" value={`${Math.round((1 - stats.availableSlots / stats.totalSlots) * 100)}%`} icon={Clock} />
+          <StatCard title="PSI" value="Live disabled" icon={AlertTriangle} />
         </div>
-      )}
 
-      {/* Map + Sidebar */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="lg:col-span-2">
-          <div className="w-full h-[550px] rounded-lg overflow-hidden border shadow-sm">
+        <LocationSelector onDetectLocation={detectLocation} userLocation={userLocation} />
+
+        {routeInfo && <RouteDisplay routeInfo={routeInfo} />}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
             <CityMap
-              parkingZones={nearbyParkingZones}
-              trafficZones={nearbyTrafficZones}
-              userLocation={effectiveLocation}
-              onSelectParkingZone={handleSelectParkingZone}
-              selectedZoneId={navigatingToZone?.id}
-              routeInfo={routeInfo ? { path: routeInfo.path, congestion: routeInfo.congestion } : null}
+              parkingZones={nearbyParking}
+              userLocation={userLocation}
+              routeInfo={routeInfo}
+              onSelectParkingZone={handleSelectParking}
+              onNavigate={handleNavigate}
+              showRadius
               radiusKm={RADIUS_KM}
-              showRadius={!!effectiveLocation}
             />
           </div>
-          {/* Legend */}
-          <div className="mt-3 flex gap-4 text-sm">
-            <span className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-success" /> Low PSI/Traffic</span>
-            <span className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-warning" /> Moderate</span>
-            <span className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-destructive" /> High</span>
+
+          <div>
+            <NearbyParkingList
+              zones={nearbyParking}
+              onSelectZone={handleSelectParking}
+              onNavigate={handleNavigate}
+            />
           </div>
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-4">
-          <NearbyParkingList
-            zones={nearbyParkingZones}
-            onSelectZone={handleSelectParkingZone}
-            onNavigate={handleNavigate}
-            selectedZoneId={navigatingToZone?.id}
-          />
-        </div>
-      </div>
+        <MyBookings bookings={bookings} />
 
-      {/* My Bookings */}
-      <MyBookings bookings={myBookings} />
-
-      {/* Booking Modal */}
-      <BookingModal
-        zone={selectedZone}
-        isOpen={showBookingModal}
-        onClose={() => { setShowBookingModal(false); setSelectedZone(null); }}
-        onConfirm={handleConfirmBooking}
-        routeInfo={routeInfo && selectedZone?.id === navigatingToZone?.id ? routeInfo : null}
-        userName={user?.name}
-        userEmail={user?.email}
-      />
+        <BookingModal
+          zone={selectedZone}
+          isOpen={showBookingModal}
+          onClose={() => setShowBookingModal(false)}
+          userEmail={user?.email}
+          userName={user?.name}
+        />
+      </motion.div>
     </DashboardLayout>
   );
 };
