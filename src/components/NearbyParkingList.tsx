@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import PSIIndicator from '@/components/PSIIndicator';
-import { ParkingZone } from '@/data/mockData';
+import { ParkingZone } from '@/types';
 import { Car, MapPin, IndianRupee, Navigation } from 'lucide-react';
 
 interface NearbyParkingListProps {
@@ -75,6 +75,12 @@ const NearbyParkingList: React.FC<NearbyParkingListProps> = ({
                       {zone.pricePerHour}/hr
                     </span>
                   </div>
+
+                  {zone.distance !== undefined && (
+                    <p className="text-xs text-muted-foreground mb-2">
+                      📍 {zone.distance.toFixed(1)} km away
+                    </p>
+                  )}
 
                   <div className="flex gap-2">
                     {onNavigate && (
