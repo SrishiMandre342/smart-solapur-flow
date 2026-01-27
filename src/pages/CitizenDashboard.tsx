@@ -1,187 +1,197 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import DashboardLayout from "@/components/DashboardLayout";
 import CityMap from "@/components/CityMap";
-import StatCard from "@/components/StatCard";
+import SummaryCard from "@/components/SummaryCard";
 import LocationSelector from "@/components/LocationSelector";
 import BookingModal from "@/components/BookingModal";
-import MyBookings from "@/components/MyBookings";
 import NearbyParkingList from "@/components/NearbyParkingList";
 import RouteDisplay from "@/components/RouteDisplay";
-
-import { useAuth } from "@/contexts/AuthContext";
+import { parkingZones, trafficZones, getTotalStats } from "@/data/mockData";
+import { solapurLocations, SolapurLocation, getDistance } from "@/data/locations";
+import { ParkingZone } from "@/types";
 import { useToast } from "@/hooks/use-toast";
-
-import { db } from "@/firebase/firebase";
-import {
-  collection,
-  onSnapshot,
-  query,
-  where,
-  orderBy
-} from "firebase/firestore";
-
-import { MapPin, Car, Clock, AlertTriangle } from "lucide-react";
-
-type ParkingZone = {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-  totalSlots: number;
-  availableSlots: number;
-  pricePerHour: number;
-};
-
-type Booking = {
-  id: string;
-  zoneId: string;
-  zoneName: string;
-  amount: number;
-  startTime: any;
-  endTime: any;
-  status: string;
-};
+import { MapPin, Car, Clock, Activity } from "lucide-react";
 
 const CitizenDashboard: React.FC = () => {
-  const { user } = useAuth();
   const { toast } = useToast();
 
-  const [parkingZones, setParkingZones] = useState<ParkingZone[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
-
+  // Location state
+  const [selectedLocation, setSelectedLocation] = useState<SolapurLocation | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+
+  // Booking state
   const [selectedZone, setSelectedZone] = useState<ParkingZone | null>(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [routeInfo, setRouteInfo] = useState<any>(null);
+  const [routeInfo, setRouteInfo] = useState<{
+    path: [number, number][];
+    congestion: 'low' | 'moderate' | 'high';
+    distance: number;
+    eta: number;
+    destinationName: string;
+  } | null>(null);
 
   const RADIUS_KM = 2.5;
 
-  // --- LIVE PARKING DATA ---
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "parking_zones"), (snap) => {
-      setParkingZones(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ParkingZone)));
-    });
-    return unsub;
-  }, []);
-
-  // --- USER BOOKINGS LIVE ---
-  useEffect(() => {
-    if (!user) return;
-    const unsub = onSnapshot(
-      query(collection(db, "bookings"), where("userId", "==", user.uid), orderBy("startTime", "desc")),
-      (snap) => {
-        setBookings(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Booking)));
-      }
-    );
-    return unsub;
-  }, [user]);
-
-  // --- DETECT USER LOCATION (SIMULATED) ---
+  // Detect user location
   const detectLocation = () => {
+    setIsLocating(true);
+    setSelectedLocation(null);
+
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        () => {
+        (position) => {
+          // Simulating Solapur area coordinates
           setUserLocation({
             lat: 17.6599 + (Math.random() - 0.5) * 0.01,
             lng: 75.9064 + (Math.random() - 0.5) * 0.01,
           });
-          toast({ title: "Location detected", description: "Nearby parking shown" });
+          setIsLocating(false);
+          toast({ title: "Location detected", description: "Showing nearby parking zones" });
         },
         () => {
+          // Fallback to city center
           setUserLocation({ lat: 17.6599, lng: 75.9064 });
+          setIsLocating(false);
+          toast({ title: "Using default location", description: "Centered on Solapur" });
         }
       );
     } else {
       setUserLocation({ lat: 17.6599, lng: 75.9064 });
+      setIsLocating(false);
     }
   };
 
-  // --- DISTANCE UTILITY ---
-  const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(lat1 * Math.PI / 180) *
-        Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  // Handle location selection from dropdown
+  const handleSelectLocation = (location: SolapurLocation | null) => {
+    setSelectedLocation(location);
+    if (location) {
+      setUserLocation({ lat: location.lat, lng: location.lng });
+      setRouteInfo(null);
+    }
   };
 
-  // --- NEARBY PARKING FILTER ---
+  // Get current center point
+  const currentCenter = useMemo(() => {
+    if (selectedLocation) {
+      return { lat: selectedLocation.lat, lng: selectedLocation.lng };
+    }
+    return userLocation;
+  }, [selectedLocation, userLocation]);
+
+  // Filter nearby parking zones
   const nearbyParking = useMemo(() => {
-    if (!userLocation) return [];
+    if (!currentCenter) return [];
     return parkingZones
-      .map((z) => ({
-        ...z,
-        distance: getDistance(userLocation.lat, userLocation.lng, z.lat, z.lng)
+      .map((zone) => ({
+        ...zone,
+        distance: getDistance(currentCenter.lat, currentCenter.lng, zone.lat, zone.lng),
       }))
-      .filter((z) => z.distance <= RADIUS_KM)
+      .filter((zone) => zone.distance <= RADIUS_KM)
       .sort((a, b) => a.distance - b.distance);
-  }, [userLocation, parkingZones]);
+  }, [currentCenter]);
 
-  // --- SIMPLE ROUTE + ETA ---
+  // Filter nearby traffic zones
+  const nearbyTraffic = useMemo(() => {
+    if (!currentCenter) return trafficZones;
+    return trafficZones.filter((zone) => {
+      const dist = getDistance(currentCenter.lat, currentCenter.lng, zone.lat, zone.lng);
+      return dist <= RADIUS_KM * 1.5;
+    });
+  }, [currentCenter]);
+
+  // Navigate to zone
   const handleNavigate = (zone: ParkingZone) => {
-    if (!userLocation) return;
+    if (!currentCenter) return;
 
-    const distance = getDistance(
-      userLocation.lat,
-      userLocation.lng,
-      zone.lat,
-      zone.lng
-    );
-
-    const speed = 30; // km/h
+    const distance = getDistance(currentCenter.lat, currentCenter.lng, zone.lat, zone.lng);
+    const congestion = zone.psi > 70 ? 'high' : zone.psi > 40 ? 'moderate' : 'low';
+    const speed = congestion === 'high' ? 15 : congestion === 'moderate' ? 25 : 40;
     const eta = Math.ceil((distance / speed) * 60);
 
     setRouteInfo({
-      destinationName: zone.name,
+      path: [
+        [currentCenter.lat, currentCenter.lng],
+        [zone.lat, zone.lng],
+      ],
+      congestion,
       distance,
       eta,
-      path: [
-        [userLocation.lat, userLocation.lng],
-        [zone.lat, zone.lng]
-      ]
+      destinationName: zone.name,
     });
   };
 
+  // Open booking modal
   const handleSelectParking = (zone: ParkingZone) => {
     setSelectedZone(zone);
     setShowBookingModal(true);
   };
 
-  const stats = {
-    totalSlots: parkingZones.reduce((a, z) => a + z.totalSlots, 0),
-    availableSlots: parkingZones.reduce((a, z) => a + z.availableSlots, 0),
-    totalZones: parkingZones.length,
-    avgPsi: 0
+  // Handle successful booking
+  const handleBookingSuccess = () => {
+    toast({
+      title: "Booking Confirmed!",
+      description: "Your parking slot has been reserved.",
+    });
   };
+
+  // Stats
+  const stats = getTotalStats();
 
   return (
     <DashboardLayout title="Citizen Dashboard">
       <motion.div className="space-y-6">
-        {/* Stats */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard title="Available Slots" value={stats.availableSlots} icon={Car} variant="success" />
-          <StatCard title="Parking Zones" value={stats.totalZones} icon={MapPin} variant="primary" />
-          <StatCard title="Avg. Occupancy" value={`${Math.round((1 - stats.availableSlots / stats.totalSlots) * 100)}%`} icon={Clock} />
-          <StatCard title="PSI" value="Live disabled" icon={AlertTriangle} />
+          <SummaryCard
+            title="Available Slots"
+            value={stats.availableSlots}
+            icon={Car}
+            variant="success"
+          />
+          <SummaryCard
+            title="Parking Zones"
+            value={stats.totalZones}
+            icon={MapPin}
+            variant="primary"
+          />
+          <SummaryCard
+            title="Avg. Occupancy"
+            value={`${stats.occupancy}%`}
+            icon={Clock}
+            variant="warning"
+          />
+          <SummaryCard
+            title="Avg. PSI"
+            value={stats.avgPsi}
+            icon={Activity}
+            variant={stats.avgPsi > 60 ? 'destructive' : 'default'}
+          />
         </div>
 
-        <LocationSelector onDetectLocation={detectLocation} userLocation={userLocation} />
+        {/* Location Selector */}
+        <LocationSelector
+          selectedLocation={selectedLocation}
+          userLocation={userLocation}
+          isLocating={isLocating}
+          onSelectLocation={handleSelectLocation}
+          onDetectLocation={detectLocation}
+        />
 
+        {/* Route Display */}
         {routeInfo && <RouteDisplay routeInfo={routeInfo} />}
 
+        {/* Map and Parking List */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
             <CityMap
               parkingZones={nearbyParking}
-              userLocation={userLocation}
+              trafficZones={nearbyTraffic}
+              userLocation={currentCenter}
               routeInfo={routeInfo}
               onSelectParkingZone={handleSelectParking}
-              onNavigate={handleNavigate}
+              selectedZoneId={selectedZone?.id}
               showRadius
               radiusKm={RADIUS_KM}
             />
@@ -192,18 +202,22 @@ const CitizenDashboard: React.FC = () => {
               zones={nearbyParking}
               onSelectZone={handleSelectParking}
               onNavigate={handleNavigate}
+              selectedZoneId={selectedZone?.id}
             />
           </div>
         </div>
 
-        <MyBookings bookings={bookings} />
-
+        {/* Booking Modal */}
         <BookingModal
           zone={selectedZone}
           isOpen={showBookingModal}
           onClose={() => setShowBookingModal(false)}
-          userEmail={user?.email}
-          userName={user?.name}
+          onSuccess={handleBookingSuccess}
+          routeInfo={routeInfo ? {
+            distance: routeInfo.distance,
+            eta: routeInfo.eta,
+            congestion: routeInfo.congestion,
+          } : null}
         />
       </motion.div>
     </DashboardLayout>

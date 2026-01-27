@@ -2,14 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { auth, db } from "@/firebase/firebase";
 import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-
-type UserRole = "citizen" | "admin";
-
-interface AppUser {
-  uid: string;
-  email: string;
-  role: UserRole;
-}
+import { AppUser } from "@/types";
 
 interface AuthContextType {
   user: AppUser | null;
@@ -38,12 +31,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const ref = doc(db, "users", firebaseUser.uid);
       const snap = await getDoc(ref);
 
-      const role = snap.exists() ? snap.data().role as UserRole : "citizen";
+      const userData = snap.exists() ? snap.data() : {};
+      const role = userData.role as AppUser['role'] || "citizen";
+      const name = userData.name || firebaseUser.email?.split('@')[0] || "User";
 
       setUser({
         uid: firebaseUser.uid,
         email: firebaseUser.email || "",
+        name,
         role,
+        vehiclePlate: userData.vehiclePlate,
+        phone: userData.phone,
       });
 
       setLoading(false);

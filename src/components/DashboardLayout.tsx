@@ -1,6 +1,6 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { 
@@ -8,7 +8,12 @@ import {
   MapPin, 
   Settings,
   User,
-  Bell
+  Bell,
+  Home,
+  Ticket,
+  LayoutDashboard,
+  Activity,
+  Users,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -19,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { NavLink } from '@/components/NavLink';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -28,22 +34,41 @@ interface DashboardLayoutProps {
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, title }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const getInitials = (name: string) => {
+  const getInitials = (name?: string) => {
+    if (!name) return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase();
   };
+
+  const isAdmin = user?.role === 'admin';
+
+  const citizenLinks = [
+    { to: '/dashboard', label: 'Dashboard', icon: Home },
+    { to: '/bookings', label: 'My Bookings', icon: Ticket },
+    { to: '/profile', label: 'Profile', icon: User },
+  ];
+
+  const adminLinks = [
+    { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+    { to: '/admin/bookings', label: 'Bookings', icon: Ticket },
+    { to: '/admin/zones', label: 'Zones', icon: MapPin },
+    { to: '/admin/traffic', label: 'Traffic', icon: Activity },
+  ];
+
+  const navLinks = isAdmin ? adminLinks : citizenLinks;
 
   return (
     <div className="w-full min-h-screen flex flex-col bg-background">
       
       {/* NAVBAR */}
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur">
-        <div className="flex justify-between items-center px-6 h-16">
+        <div className="flex justify-between items-center px-4 sm:px-6 h-16">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg gradient-primary flex items-center justify-center">
               <MapPin className="w-5 h-5 text-primary-foreground" />
@@ -58,6 +83,21 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, title }) =>
             </div>
           </div>
 
+          {/* Navigation Links */}
+          <nav className="hidden md:flex items-center gap-1">
+            {navLinks.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                className="px-3 py-2 text-sm font-medium rounded-md transition-colors"
+                activeClassName="bg-primary/10 text-primary"
+              >
+                <link.icon className="w-4 h-4 mr-2 inline-block" />
+                {link.label}
+              </NavLink>
+            ))}
+          </nav>
+
           <div className="flex items-center gap-4">
             {/* Notifications */}
             <Button variant="ghost" size="icon" className="relative">
@@ -71,23 +111,34 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, title }) =>
                 <Button variant="ghost" className="flex items-center gap-2">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                      {user?.name ? getInitials(user.name) : 'U'}
+                      {getInitials(user?.name)}
                     </AvatarFallback>
                   </Avatar>
                   <span className="hidden md:block text-sm font-medium">
-                    {user?.name}
+                    {user?.name || user?.email?.split('@')[0]}
                   </span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
                   <div className="flex flex-col">
-                    <span>{user?.name}</span>
+                    <span>{user?.name || 'User'}</span>
                     <span className="text-xs text-muted-foreground">{user?.email}</span>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
+
+                {/* Mobile Nav Links */}
+                <div className="md:hidden">
+                  {navLinks.map((link) => (
+                    <DropdownMenuItem key={link.to} onClick={() => navigate(link.to)}>
+                      <link.icon className="w-4 h-4 mr-2" /> {link.label}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                </div>
+
+                <DropdownMenuItem onClick={() => navigate(isAdmin ? '/admin' : '/profile')}>
                   <User className="w-4 h-4 mr-2" /> Profile
                 </DropdownMenuItem>
                 <DropdownMenuItem>
@@ -107,7 +158,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, title }) =>
       </header>
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 w-full px-6 py-6 overflow-y-auto">
+      <main className="flex-1 w-full px-4 sm:px-6 py-6 overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}

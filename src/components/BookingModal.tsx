@@ -11,20 +11,16 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import PSIIndicator from '@/components/PSIIndicator';
-import { ParkingZone } from '@/data/mockData';
+import { ParkingZone } from '@/types';
 import { MapPin, Car, Clock, IndianRupee, CheckCircle, Navigation } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-
-// Backend services
-import { createBooking } from '@/services/bookings';
-import { updateZoneSlots } from '@/services/zones';
 
 interface BookingModalProps {
   zone: ParkingZone | null;
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess?: () => void;
   routeInfo?: {
     distance: number;
     eta: number;
@@ -41,9 +37,8 @@ const BookingModal: React.FC<BookingModalProps> = ({
   onSuccess,
   routeInfo,
   userName = "Citizen",
-  userEmail = "unknown@example.com",
+  userEmail = "user@example.com",
 }) => {
-
   const [duration, setDuration] = useState('1');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -65,41 +60,18 @@ const BookingModal: React.FC<BookingModalProps> = ({
 
     setLoading(true);
 
-    try {
-      // 1. Create booking in Firestore
-      await createBooking({
-        zoneId: zone.id,
-        zoneName: zone.name,
-        wardName: zone.wardName,
-        citizenName: userName,
-        citizenEmail: userEmail,
-        duration: Number(duration),
-        amount: totalAmount,
-        status: "confirmed",
-        paymentStatus: "pending",
-      });
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // 2. Decrease available slots by 1
-      await updateZoneSlots(zone.id, -1);
+    setSuccess(true);
+    setLoading(false);
 
-      setSuccess(true);
-
-      setTimeout(() => {
-        onSuccess();
-        onClose();
-        setSuccess(false);
-      }, 1200);
-
-    } catch (err: any) {
-      console.error(err);
-      toast({
-        title: "Booking Failed",
-        description: err.message || "Try again later",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+    setTimeout(() => {
+      onSuccess?.();
+      onClose();
+      setSuccess(false);
+      setDuration('1');
+    }, 1500);
   };
 
   const getCongestionColor = (level: string) =>
@@ -121,8 +93,8 @@ const BookingModal: React.FC<BookingModalProps> = ({
             >
               <CheckCircle className="w-12 h-12 text-success" />
               <h3 className="font-semibold text-lg">Booking Confirmed!</h3>
-              <p className="text-sm text-muted-foreground">
-                Pay at parking counter when you arrive.
+              <p className="text-sm text-muted-foreground text-center">
+                Your slot at {zone.name} has been reserved.
               </p>
             </motion.div>
           ) : (
@@ -137,12 +109,12 @@ const BookingModal: React.FC<BookingModalProps> = ({
                   <Car className="w-5 h-5 text-primary" /> Book Parking
                 </DialogTitle>
                 <DialogDescription>
-                  Reserve a slot for {zone.name}
+                  Reserve a slot at {zone.name}
                 </DialogDescription>
               </DialogHeader>
 
               <div className="space-y-4 py-4">
-                {/* Parking Zone Info */}
+                {/* Zone Info */}
                 <div className="p-3 rounded-lg border bg-secondary/30">
                   <div className="flex justify-between items-center">
                     <span className="font-medium">{zone.name}</span>
@@ -174,15 +146,15 @@ const BookingModal: React.FC<BookingModalProps> = ({
                     </div>
                     <div className="grid grid-cols-3 text-center">
                       <div>
-                        <p className="text-xs">Distance</p>
+                        <p className="text-xs text-muted-foreground">Distance</p>
                         <p className="font-semibold">{routeInfo.distance.toFixed(1)} km</p>
                       </div>
                       <div>
-                        <p className="text-xs">ETA</p>
+                        <p className="text-xs text-muted-foreground">ETA</p>
                         <p className="font-semibold">{routeInfo.eta} min</p>
                       </div>
                       <div>
-                        <p className="text-xs">Traffic</p>
+                        <p className="text-xs text-muted-foreground">Traffic</p>
                         <p className={`font-semibold capitalize ${getCongestionColor(routeInfo.congestion)}`}>
                           {routeInfo.congestion}
                         </p>
@@ -198,7 +170,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {[1,2,3,4,5,6].map((d) => (
-                        <SelectItem key={d} value={`${d}`}>{d} Hour</SelectItem>
+                        <SelectItem key={d} value={`${d}`}>{d} Hour{d > 1 ? 's' : ''}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -206,7 +178,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
 
                 {/* Total */}
                 <div className="p-3 border rounded-lg bg-primary/10 flex justify-between items-center">
-                  <span className="font-medium">Amount</span>
+                  <span className="font-medium">Total Amount</span>
                   <span className="text-xl font-bold flex items-center gap-1 text-primary">
                     <IndianRupee className="w-5 h-5" /> {totalAmount}
                   </span>
@@ -219,7 +191,7 @@ const BookingModal: React.FC<BookingModalProps> = ({
                   onClick={handleConfirm}
                   disabled={loading || zone.availableSlots === 0}
                 >
-                  {zone.availableSlots === 0 ? "No Slots" : loading ? "Booking..." : "Confirm"}
+                  {zone.availableSlots === 0 ? "No Slots" : loading ? "Booking..." : "Confirm Booking"}
                 </Button>
               </DialogFooter>
             </motion.div>
