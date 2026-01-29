@@ -190,17 +190,61 @@
   }
 }
 
-/* Leaflet overrides */
+/* Leaflet overrides - Lower z-index to ensure modals appear above */
 .leaflet-container {
   font-family: 'Inter', system-ui, sans-serif;
   border-radius: var(--radius);
+  z-index: 1 !important;
+}
+
+.leaflet-pane {
+  z-index: 1 !important;
+}
+
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 10 !important;
+}
+
+.leaflet-popup {
+  z-index: 100 !important;
 }
 
 .leaflet-popup-content-wrapper {
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
 }
 
 .leaflet-popup-content {
   margin: 12px 16px;
+}
+
+.leaflet-popup-tip {
+  background: hsl(var(--card));
+}
+
+/* Modal z-index hierarchy */
+[data-radix-dialog-overlay] {
+  z-index: 9998 !important;
+}
+
+[data-radix-dialog-content] {
+  z-index: 9999 !important;
+}
+
+/* Dropdown and popover z-index */
+[data-radix-popper-content-wrapper] {
+  z-index: 10000 !important;
+}
+
+/* Tooltip z-index */
+[data-radix-tooltip-content] {
+  z-index: 10001 !important;
+}
+
+/* Dark mode map overlay */
+.dark .leaflet-tile-pane {
+  filter: brightness(0.85) contrast(1.1);
 }

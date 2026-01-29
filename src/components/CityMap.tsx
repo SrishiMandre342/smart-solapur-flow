@@ -156,12 +156,13 @@ const CityMap: React.FC<CityMapProps> = ({
   const userLocationIcon = useMemo(() => createUserLocationIcon(), []);
 
   return (
-    <div className="w-full h-full min-h-[500px]">
+    <div className="w-full h-full min-h-[400px] md:min-h-[500px] rounded-lg overflow-hidden border border-border">
       <MapContainer
         center={center}
         zoom={14}
         scrollWheelZoom={true}
-        style={{ width: "100%", height: "100%" }}
+        style={{ width: "100%", height: "100%", zIndex: 1 }}
+        className="z-0"
       >
         <TileLayer 
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

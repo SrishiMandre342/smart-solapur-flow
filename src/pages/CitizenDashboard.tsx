@@ -23,12 +23,19 @@ const CitizenDashboard: React.FC = () => {
 
   const [selectedZone, setSelectedZone] = useState<ParkingZone | null>(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const [routeInfo, setRouteInfo] = useState<{
+    distance: number;
+    eta: number;
+    congestion: "low" | "moderate" | "high";
+    destinationName: string;
+  } | null>(null);
 
   const RADIUS_KM = 2.5;
 
   const detectLocation = () => {
     setIsLocating(true);
     setSelectedLocation(null);
+    setRouteInfo(null);
 
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -53,6 +60,7 @@ const CitizenDashboard: React.FC = () => {
 
   const handleSelectLocation = (location: SolapurLocation | null) => {
     setSelectedLocation(location);
+    setRouteInfo(null);
     if (location) {
       setUserLocation({ lat: location.lat, lng: location.lng });
     }
@@ -87,12 +95,32 @@ const CitizenDashboard: React.FC = () => {
       toast({ title: "Location not detected", description: "Tap detect location first." });
       return;
     }
+
+    // Calculate mock route info
+    const distance = getDistance(currentCenter.lat, currentCenter.lng, zone.lat, zone.lng);
+    const congestionLevels: ("low" | "moderate" | "high")[] = ["low", "moderate", "high"];
+    const congestion = congestionLevels[Math.floor(Math.random() * 3)];
+    const speedMap = { low: 40, moderate: 25, high: 15 };
+    const eta = Math.round((distance / speedMap[congestion]) * 60);
+
+    setRouteInfo({
+      distance,
+      eta,
+      congestion,
+      destinationName: zone.name,
+    });
+
+    setSelectedZone(zone);
+
+    // Open Google Maps navigation
     openGoogleMapsNavigation(currentCenter, zone);
   };
 
   const handleSelectParking = (zone: ParkingZone) => {
     setSelectedZone(zone);
-    setShowBookingModal(true);
+    if (zone.availableSlots > 0) {
+      setShowBookingModal(true);
+    }
   };
 
   const stats = getTotalStats();
@@ -100,14 +128,15 @@ const CitizenDashboard: React.FC = () => {
   return (
     <DashboardLayout title="Citizen Dashboard">
       <motion.div className="space-y-6">
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <SummaryCard title="Available Slots" value={stats.availableSlots} icon={Car} variant="success" />
           <SummaryCard title="Parking Zones" value={stats.totalZones} icon={MapPin} variant="primary" />
           <SummaryCard title="Avg. Occupancy" value={`${stats.occupancy}%`} icon={Clock} variant="warning" />
           <SummaryCard title="Avg. PSI" value={stats.avgPsi} icon={Activity} variant="default" />
         </div>
 
+        {/* Location Selector */}
         <LocationSelector
           selectedLocation={selectedLocation}
           userLocation={userLocation}
@@ -116,34 +145,43 @@ const CitizenDashboard: React.FC = () => {
           onDetectLocation={detectLocation}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <CityMap
-              parkingZones={nearbyParking}
-              trafficZones={nearbyTraffic}
-              userLocation={currentCenter}
-              onSelectParkingZone={handleSelectParking}
-              selectedZoneId={selectedZone?.id}
-              showRadius
-              radiusKm={RADIUS_KM}
-            />
+        {/* Route Display (when navigating) */}
+        {routeInfo && <RouteDisplay routeInfo={routeInfo} />}
+
+        {/* Map + Parking List - Responsive Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-3 gap-4 lg:gap-6">
+          {/* Map Section - Order changes on mobile */}
+          <div className="lg:col-span-3 xl:col-span-2 order-2 lg:order-1">
+            <div className="h-[350px] sm:h-[400px] md:h-[450px] lg:h-[550px]">
+              <CityMap
+                parkingZones={nearbyParking}
+                trafficZones={nearbyTraffic}
+                userLocation={currentCenter}
+                onSelectParkingZone={handleSelectParking}
+                selectedZoneId={selectedZone?.id}
+                showRadius
+                radiusKm={RADIUS_KM}
+              />
+            </div>
           </div>
 
-          <NearbyParkingList
-            zones={nearbyParking}
-            onSelectZone={handleSelectParking}
-            onNavigate={handleNavigate}
-            selectedZoneId={selectedZone?.id}
-          />
+          {/* Parking List - Shows first on mobile */}
+          <div className="lg:col-span-2 xl:col-span-1 order-1 lg:order-2">
+            <NearbyParkingList
+              zones={nearbyParking}
+              onSelectZone={handleSelectParking}
+              onNavigate={handleNavigate}
+              selectedZoneId={selectedZone?.id}
+            />
+          </div>
         </div>
 
+        {/* Booking Modal */}
         <BookingModal
           zone={selectedZone}
           isOpen={showBookingModal}
           onClose={() => setShowBookingModal(false)}
-          onSuccess={() => toast({ title: "Booking Confirmed" })}
         />
-
       </motion.div>
     </DashboardLayout>
   );
