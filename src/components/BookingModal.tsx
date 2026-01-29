@@ -1,202 +1,135 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+// src/components/BookingModal.tsx
+
+import React, { useState } from "react";
 import {
   Dialog,
-  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogContent,
   DialogFooter,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import PSIIndicator from '@/components/PSIIndicator';
-import { ParkingZone } from '@/types';
-import { MapPin, Car, Clock, IndianRupee, CheckCircle, Navigation } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import PSIIndicator from "@/components/PSIIndicator";
+import { ParkingZone } from "@/data/mockData";
+import { bookSlot } from "@/services/bookingService";
+import { useAuth } from "@/contexts/AuthContext";
+import { IndianRupee, Car, MapPin, CheckCircle, Clock } from "lucide-react";
 
 interface BookingModalProps {
   zone: ParkingZone | null;
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
-  routeInfo?: {
-    distance: number;
-    eta: number;
-    congestion: 'low' | 'moderate' | 'high';
-  } | null;
-  userName?: string;
-  userEmail?: string;
 }
 
-const BookingModal: React.FC<BookingModalProps> = ({
-  zone,
-  isOpen,
-  onClose,
-  onSuccess,
-  routeInfo,
-  userName = "Citizen",
-  userEmail = "user@example.com",
-}) => {
-  const [duration, setDuration] = useState('1');
+const BookingModal: React.FC<BookingModalProps> = ({ zone, isOpen, onClose }) => {
+  const { user } = useAuth();
+  const [duration, setDuration] = useState(1);
+  const [plate, setPlate] = useState("");
   const [loading, setLoading] = useState(false);
+  const totalAmount = zone ? zone.pricePerHour * duration : 0;
   const [success, setSuccess] = useState(false);
-  const { toast } = useToast();
-
-  if (!zone) return null;
-
-  const totalAmount = zone.pricePerHour * parseInt(duration);
 
   const handleConfirm = async () => {
-    if (zone.availableSlots === 0) {
-      toast({
-        title: "No Slots Available",
-        description: "Please select another parking zone.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+    if (!zone || !user) return;
     setLoading(true);
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await bookSlot(user.uid, zone.id, totalAmount, plate);
 
-    setSuccess(true);
     setLoading(false);
+    setSuccess(true);
 
     setTimeout(() => {
-      onSuccess?.();
-      onClose();
       setSuccess(false);
-      setDuration('1');
+      onClose();
     }, 1500);
   };
 
-  const getCongestionColor = (level: string) =>
-    level === "high" ? "text-destructive" :
-    level === "moderate" ? "text-warning" :
-    "text-success";
+  if (!zone || !isOpen) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]">
-        <AnimatePresence mode="wait">
-          {success ? (
-            <motion.div
-              key="success"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex flex-col items-center gap-2 py-6"
-            >
-              <CheckCircle className="w-12 h-12 text-success" />
-              <h3 className="font-semibold text-lg">Booking Confirmed!</h3>
-              <p className="text-sm text-muted-foreground text-center">
-                Your slot at {zone.name} has been reserved.
-              </p>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="form"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Car className="w-5 h-5 text-primary" /> Book Parking
-                </DialogTitle>
-                <DialogDescription>
-                  Reserve a slot at {zone.name}
-                </DialogDescription>
-              </DialogHeader>
+      <DialogContent>
+        {!success ? (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Car className="w-5 h-5 text-primary" />
+                Book Parking
+              </DialogTitle>
+              <DialogDescription>
+                Reserve a slot at {zone.name}
+              </DialogDescription>
+            </DialogHeader>
 
-              <div className="space-y-4 py-4">
-                {/* Zone Info */}
-                <div className="p-3 rounded-lg border bg-secondary/30">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">{zone.name}</span>
-                    <PSIIndicator value={zone.psi} size="sm" />
-                  </div>
-
-                  <div className="text-sm flex items-center gap-2 mt-1 text-muted-foreground">
-                    <MapPin className="w-4 h-4" /> {zone.wardName}
-                  </div>
-
-                  <div className="text-sm mt-2 flex justify-between">
-                    <span>Available Slots:</span>
-                    <span className="font-semibold">
-                      {zone.availableSlots}/{zone.totalSlots}
-                    </span>
-                  </div>
-
-                  <div className="text-sm mt-1 flex justify-between">
-                    <span>Price/hr:</span>
-                    <span className="font-semibold text-primary">₹{zone.pricePerHour}</span>
-                  </div>
+            <div className="space-y-4 pt-4">
+              <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{zone.name}</span>
+                  <PSIIndicator value={zone.psi} size="sm" />
                 </div>
-
-                {/* Route Info */}
-                {routeInfo && (
-                  <div className="p-3 border rounded-lg bg-card">
-                    <div className="flex items-center gap-2 font-medium text-sm mb-2">
-                      <Navigation className="w-4 h-4 text-primary" /> Route Info
-                    </div>
-                    <div className="grid grid-cols-3 text-center">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Distance</p>
-                        <p className="font-semibold">{routeInfo.distance.toFixed(1)} km</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">ETA</p>
-                        <p className="font-semibold">{routeInfo.eta} min</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Traffic</p>
-                        <p className={`font-semibold capitalize ${getCongestionColor(routeInfo.congestion)}`}>
-                          {routeInfo.congestion}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Duration */}
-                <div className="space-y-2">
-                  <Label>Duration</Label>
-                  <Select value={duration} onValueChange={setDuration}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {[1,2,3,4,5,6].map((d) => (
-                        <SelectItem key={d} value={`${d}`}>{d} Hour{d > 1 ? 's' : ''}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="flex items-center gap-2 text-sm">
+                  <MapPin className="w-4 h-4" /> {zone.wardName}
                 </div>
-
-                {/* Total */}
-                <div className="p-3 border rounded-lg bg-primary/10 flex justify-between items-center">
-                  <span className="font-medium">Total Amount</span>
-                  <span className="text-xl font-bold flex items-center gap-1 text-primary">
-                    <IndianRupee className="w-5 h-5" /> {totalAmount}
-                  </span>
+                <div className="text-sm flex justify-between">
+                  <span>Available Slots:</span>
+                  <span>{zone.availableSlots}/{zone.totalSlots}</span>
+                </div>
+                <div className="text-sm flex justify-between">
+                  <span>Price Per Hour:</span>
+                  <span>₹{zone.pricePerHour}</span>
                 </div>
               </div>
 
-              <DialogFooter>
-                <Button variant="outline" onClick={onClose}>Cancel</Button>
-                <Button
-                  onClick={handleConfirm}
-                  disabled={loading || zone.availableSlots === 0}
+              {/* Plate Input */}
+              <div className="space-y-2">
+                <Label>Vehicle Number</Label>
+                <input
+                  type="text"
+                  placeholder="e.g. MH13AB1234"
+                  className="border rounded px-3 py-2 w-full"
+                  value={plate}
+                  onChange={(e) => setPlate(e.target.value.toUpperCase())}
+                />
+              </div>
+
+              {/* Duration */}
+              <div className="space-y-2">
+                <Label>Duration (Hours)</Label>
+                <select
+                  value={duration}
+                  onChange={(e) => setDuration(parseInt(e.target.value))}
+                  className="border rounded px-3 py-2 w-full"
                 >
-                  {zone.availableSlots === 0 ? "No Slots" : loading ? "Booking..." : "Confirm Booking"}
-                </Button>
-              </DialogFooter>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                  {[1, 2, 3, 4, 5, 6].map((h) => (
+                    <option key={h} value={h}>{h} Hour</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="p-3 border rounded bg-primary/10 flex justify-between font-semibold">
+                <span>Total Amount</span>
+                <span className="flex items-center gap-1">
+                  <IndianRupee className="w-4 h-4" /> {totalAmount}
+                </span>
+              </div>
+            </div>
+
+            <DialogFooter className="pt-4">
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+              <Button disabled={loading || !plate} onClick={handleConfirm}>
+                {loading ? "Processing..." : "Confirm Booking"}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-8">
+            <CheckCircle className="w-12 h-12 text-green-600" />
+            <p className="mt-2 text-lg font-semibold">Booking Confirmed!</p>
+            <p className="text-sm text-muted-foreground">Visit admin to pay</p>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

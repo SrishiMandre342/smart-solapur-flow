@@ -1,385 +1,96 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import DashboardLayout from '@/components/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import PaymentStatusBadge from '@/components/PaymentStatusBadge';
-import { DataTable } from '@/components/ui/data-table';
-import { Booking } from '@/types';
-import {
-  Ticket,
-  MapPin,
-  Clock,
-  IndianRupee,
-  CheckCircle,
-  User,
-  CreditCard,
-} from 'lucide-react';
-import { format } from 'date-fns';
-import { useToast } from '@/hooks/use-toast';
+import React, { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { markBookingPaid } from "@/services/bookingService";
+import { toast } from "@/hooks/use-toast";
+import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { db } from "@/firebase/firebase";
 
-// Mock booking data for admin
-const mockAdminBookings: Booking[] = [
-  {
-    id: 'BK001',
-    zoneId: 'pz-1',
-    zoneName: 'Sadar Main Parking',
-    wardName: 'Sadar Bazaar',
-    citizenEmail: 'rahul.sharma@email.com',
-    citizenName: 'Rahul Sharma',
-    startTime: '2026-01-27T09:00:00',
-    endTime: '2026-01-27T11:00:00',
-    duration: 2,
-    amount: 60,
-    status: 'active',
-    paymentStatus: 'pending',
-  },
-  {
-    id: 'BK002',
-    zoneId: 'pz-5',
-    zoneName: 'Station Front Parking',
-    wardName: 'Railway Station',
-    citizenEmail: 'priya.patil@email.com',
-    citizenName: 'Priya Patil',
-    startTime: '2026-01-27T08:00:00',
-    endTime: '2026-01-27T11:00:00',
-    duration: 3,
-    amount: 120,
-    status: 'active',
-    paymentStatus: 'pending',
-  },
-  {
-    id: 'BK003',
-    zoneId: 'pz-3',
-    zoneName: 'Chowk Parking',
-    wardName: 'Sadar Bazaar',
-    citizenEmail: 'amit.deshmukh@email.com',
-    citizenName: 'Amit Deshmukh',
-    startTime: '2026-01-27T07:00:00',
-    endTime: '2026-01-27T08:00:00',
-    duration: 1,
-    amount: 35,
-    status: 'completed',
-    paymentStatus: 'paid',
-  },
-  {
-    id: 'BK004',
-    zoneId: 'pz-8',
-    zoneName: 'Temple Parking',
-    wardName: 'Siddheshwar Peth',
-    citizenEmail: 'sneha.kulkarni@email.com',
-    citizenName: 'Sneha Kulkarni',
-    startTime: '2026-01-27T10:00:00',
-    endTime: '2026-01-27T12:00:00',
-    duration: 2,
-    amount: 40,
-    status: 'reserved',
-    paymentStatus: 'pending',
-  },
-  {
-    id: 'BK005',
-    zoneId: 'pz-13',
-    zoneName: 'Commercial Hub Parking',
-    wardName: 'Murarji Peth',
-    citizenEmail: 'vikram.jadhav@email.com',
-    citizenName: 'Vikram Jadhav',
-    startTime: '2026-01-26T11:00:00',
-    endTime: '2026-01-26T15:00:00',
-    duration: 4,
-    amount: 100,
-    status: 'completed',
-    paymentStatus: 'paid',
-  },
-  {
-    id: 'BK006',
-    zoneId: 'pz-6',
-    zoneName: 'Platform Side Parking',
-    wardName: 'Railway Station',
-    citizenEmail: 'anjali.more@email.com',
-    citizenName: 'Anjali More',
-    startTime: '2026-01-26T14:00:00',
-    endTime: '2026-01-26T17:00:00',
-    duration: 3,
-    amount: 105,
-    status: 'completed',
-    paymentStatus: 'paid',
-  },
-];
+interface Booking {
+  id: string;
+  userName: string;
+  userEmail: string;
+  zoneName: string;
+  zoneId: string;
+  amount: number;
+  status: string;
+  paymentStatus: string;
+  createdAt: any;
+}
 
 const AdminBookings: React.FC = () => {
-  const [bookings, setBookings] = useState<Booking[]>(mockAdminBookings);
-  const { toast } = useToast();
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  const pendingBookings = bookings.filter(b => b.paymentStatus === 'pending');
-  const completedBookings = bookings.filter(b => b.paymentStatus === 'paid');
-
-  const handleMarkPaid = (bookingId: string) => {
-    setBookings(prev =>
-      prev.map(b =>
-        b.id === bookingId ? { ...b, paymentStatus: 'paid' as const } : b
-      )
-    );
-    toast({
-      title: 'Payment Marked',
-      description: `Booking ${bookingId} marked as paid.`,
+  useEffect(() => {
+    const q = query(collection(db, "bookings"), orderBy("createdAt", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Booking));
+      setBookings(data);
     });
+    return () => unsub();
+  }, []);
+
+  const handleMarkPaid = async (b: Booking) => {
+    setLoadingId(b.id);
+
+    try {
+      await markBookingPaid(b.id, b.zoneId, b.amount);
+      toast({
+        title: "Payment Recorded",
+        description: `₹${b.amount} received for ${b.zoneName}`,
+      });
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Error", description: "Failed to update payment" });
+    }
+
+    setLoadingId(null);
   };
 
-  const pendingColumns = [
-    {
-      key: 'id',
-      label: 'Booking ID',
-      sortable: true,
-      render: (booking: Booking) => (
-        <span className="font-mono text-sm">{booking.id}</span>
-      ),
-    },
-    {
-      key: 'citizenName',
-      label: 'User',
-      sortable: true,
-      render: (booking: Booking) => (
-        <div>
-          <p className="font-medium text-foreground flex items-center gap-1">
-            <User className="w-3 h-3" />
-            {booking.citizenName}
-          </p>
-          <p className="text-xs text-muted-foreground">{booking.citizenEmail}</p>
-        </div>
-      ),
-    },
-    {
-      key: 'zoneName',
-      label: 'Zone',
-      sortable: true,
-      render: (booking: Booking) => (
-        <div>
-          <p className="font-medium">{booking.zoneName}</p>
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <MapPin className="w-3 h-3" />
-            {booking.wardName}
-          </p>
-        </div>
-      ),
-    },
-    {
-      key: 'startTime',
-      label: 'Start Time',
-      sortable: true,
-      render: (booking: Booking) => (
-        <div className="text-sm">
-          <p>{format(new Date(booking.startTime), 'MMM d, yyyy')}</p>
-          <p className="text-xs text-muted-foreground">
-            {format(new Date(booking.startTime), 'h:mm a')}
-          </p>
-        </div>
-      ),
-    },
-    {
-      key: 'amount',
-      label: 'Amount',
-      sortable: true,
-      render: (booking: Booking) => (
-        <span className="font-semibold text-primary flex items-center gap-1">
-          <IndianRupee className="w-3 h-3" />
-          {booking.amount}
-        </span>
-      ),
-    },
-    {
-      key: 'paymentStatus',
-      label: 'Status',
-      render: (booking: Booking) => (
-        <PaymentStatusBadge status={booking.paymentStatus} />
-      ),
-    },
-    {
-      key: 'actions',
-      label: 'Action',
-      render: (booking: Booking) => (
-        <Button
-          size="sm"
-          onClick={() => handleMarkPaid(booking.id)}
-        >
-          <CreditCard className="w-4 h-4 mr-1" />
-          Mark Paid
-        </Button>
-      ),
-    },
-  ];
-
-  const completedColumns = [
-    {
-      key: 'id',
-      label: 'Booking ID',
-      sortable: true,
-      render: (booking: Booking) => (
-        <span className="font-mono text-sm">{booking.id}</span>
-      ),
-    },
-    {
-      key: 'citizenName',
-      label: 'User',
-      sortable: true,
-      render: (booking: Booking) => (
-        <div>
-          <p className="font-medium text-foreground">{booking.citizenName}</p>
-          <p className="text-xs text-muted-foreground">{booking.citizenEmail}</p>
-        </div>
-      ),
-    },
-    {
-      key: 'zoneName',
-      label: 'Zone',
-      sortable: true,
-      render: (booking: Booking) => (
-        <div>
-          <p className="font-medium">{booking.zoneName}</p>
-          <p className="text-xs text-muted-foreground">{booking.wardName}</p>
-        </div>
-      ),
-    },
-    {
-      key: 'amount',
-      label: 'Amount',
-      sortable: true,
-      render: (booking: Booking) => (
-        <span className="font-semibold text-primary flex items-center gap-1">
-          <IndianRupee className="w-3 h-3" />
-          {booking.amount}
-        </span>
-      ),
-    },
-    {
-      key: 'endTime',
-      label: 'Completed At',
-      sortable: true,
-      render: (booking: Booking) => (
-        <span className="text-sm text-muted-foreground">
-          {format(new Date(booking.endTime), 'MMM d, h:mm a')}
-        </span>
-      ),
-    },
-    {
-      key: 'paymentStatus',
-      label: 'Payment',
-      render: (booking: Booking) => (
-        <PaymentStatusBadge status={booking.paymentStatus} />
-      ),
-    },
-  ];
-
-  const totalRevenue = completedBookings.reduce((sum, b) => sum + b.amount, 0);
-  const pendingRevenue = pendingBookings.reduce((sum, b) => sum + b.amount, 0);
-
   return (
-    <DashboardLayout title="Booking Management">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="space-y-6"
-      >
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Ticket className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Bookings</p>
-                  <p className="text-xl font-bold">{bookings.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-warning/10">
-                  <Clock className="w-5 h-5 text-warning" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Pending</p>
-                  <p className="text-xl font-bold">{pendingBookings.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-success/10">
-                  <IndianRupee className="w-5 h-5 text-success" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Revenue</p>
-                  <p className="text-xl font-bold">₹{totalRevenue}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-orange-500/10">
-                  <CreditCard className="w-5 h-5 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Pending Amount</p>
-                  <p className="text-xl font-bold">₹{pendingRevenue}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Booking Management</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {bookings.length === 0 && (
+          <div className="text-sm text-muted-foreground">No bookings yet</div>
+        )}
 
-        {/* Bookings Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Ticket className="w-5 h-5 text-primary" />
-              All Bookings
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="pending" className="w-full">
-              <TabsList className="mb-4">
-                <TabsTrigger value="pending">
-                  Pending Payments ({pendingBookings.length})
-                </TabsTrigger>
-                <TabsTrigger value="completed">
-                  Completed ({completedBookings.length})
-                </TabsTrigger>
-              </TabsList>
+        {bookings.map((b) => (
+          <div
+            key={b.id}
+            className="grid grid-cols-6 items-center gap-4 border-b py-3"
+          >
+            <span className="text-sm">{b.id}</span>
+            <span className="text-sm">{b.userEmail}</span>
+            <span className="text-sm">{b.zoneName}</span>
+            <span className="font-medium">₹{b.amount}</span>
+            <span className="text-xs">
+              {b.paymentStatus === "paid" ? (
+                <span className="text-green-600 font-semibold">Paid</span>
+              ) : (
+                <span className="text-yellow-600 font-semibold">Pending</span>
+              )}
+            </span>
 
-              <TabsContent value="pending">
-                <DataTable
-                  data={pendingBookings}
-                  columns={pendingColumns}
-                  searchKey="citizenName"
-                  searchPlaceholder="Search by user name..."
-                  emptyMessage="No pending payments"
-                />
-              </TabsContent>
-
-              <TabsContent value="completed">
-                <DataTable
-                  data={completedBookings}
-                  columns={completedColumns}
-                  searchKey="citizenName"
-                  searchPlaceholder="Search by user name..."
-                  emptyMessage="No completed bookings"
-                />
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-      </motion.div>
-    </DashboardLayout>
+            {b.paymentStatus === "pending" ? (
+              <Button
+                size="sm"
+                variant="default"
+                disabled={loadingId === b.id}
+                onClick={() => handleMarkPaid(b)}
+              >
+                {loadingId === b.id ? "Processing..." : "Mark Paid"}
+              </Button>
+            ) : (
+              <span className="text-green-600 text-sm font-semibold">Completed</span>
+            )}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 };
 

@@ -1,166 +1,110 @@
-import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Booking } from '@/data/bookings';
-import { Ticket, Clock, CheckCircle, XCircle, User } from 'lucide-react';
-import { format } from 'date-fns';
+import React, { useEffect, useState } from "react";
+import { markPaid, markCompleted, listenBookings } from "@/services/bookingService";
+import { listenParkingZones } from "@/services/zoneService";
 
-interface BookingManagementProps {
-  bookings: Booking[];
+interface Booking {
+  id: string;
+  userId: string;
+  zoneId: string;
+  amount: number;
+  status: "pending" | "completed";
+  paymentStatus: "pending" | "paid";
+  createdAt?: any;
 }
 
-const BookingManagement: React.FC<BookingManagementProps> = ({ bookings }) => {
-  const getStatusBadge = (status: Booking['status']) => {
-    switch (status) {
-      case 'confirmed':
-        return (
-          <Badge className="bg-success/10 text-success border-success/20">
-            <CheckCircle className="w-3 h-3 mr-1" />
-            Confirmed
-          </Badge>
-        );
-      case 'expired':
-        return (
-          <Badge variant="secondary" className="text-muted-foreground">
-            <Clock className="w-3 h-3 mr-1" />
-            Expired
-          </Badge>
-        );
-      case 'cancelled':
-        return (
-          <Badge className="bg-destructive/10 text-destructive border-destructive/20">
-            <XCircle className="w-3 h-3 mr-1" />
-            Cancelled
-          </Badge>
-        );
-    }
+interface Zone {
+  id: string;
+  name: string;
+}
+
+const BookingManagement: React.FC = () => {
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [zones, setZones] = useState<Record<string, Zone>>({});
+
+  // Listen bookings in real-time
+  useEffect(() => {
+    const unsub = listenBookings((data) => setBookings(data));
+    return () => unsub();
+  }, []);
+
+  // Listen zones to resolve zone names
+  useEffect(() => {
+    const unsub = listenParkingZones((list) => {
+      const map: Record<string, Zone> = {};
+      list.forEach((z) => (map[z.id] = z));
+      setZones(map);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleMarkPaid = async (id: string) => {
+    await markPaid(id);
   };
 
-  const stats = {
-    total: bookings.length,
-    confirmed: bookings.filter((b) => b.status === 'confirmed').length,
-    expired: bookings.filter((b) => b.status === 'expired').length,
-    totalRevenue: bookings
-      .filter((b) => b.status !== 'cancelled')
-      .reduce((sum, b) => sum + b.amount, 0),
+  const handleMarkCompleted = async (booking: Booking) => {
+    await markCompleted(booking.id, booking.zoneId);
   };
 
   return (
-    <div className="space-y-4">
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-foreground">{stats.total}</p>
-              <p className="text-sm text-muted-foreground">Total Bookings</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-success">{stats.confirmed}</p>
-              <p className="text-sm text-muted-foreground">Active</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-muted-foreground">{stats.expired}</p>
-              <p className="text-sm text-muted-foreground">Expired</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-primary">
-                ₹{stats.totalRevenue.toLocaleString()}
-              </p>
-              <p className="text-sm text-muted-foreground">Revenue</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+    <div className="bg-card border rounded-md p-4 shadow-sm">
+      <h2 className="text-lg font-semibold mb-4">Bookings</h2>
 
-      {/* Bookings Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Ticket className="w-5 h-5 text-primary" />
-            Recent Bookings
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ScrollArea className="h-[350px]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Booking ID</TableHead>
-                  <TableHead>Citizen</TableHead>
-                  <TableHead>Zone</TableHead>
-                  <TableHead>Ward</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead className="text-center">Duration</TableHead>
-                  <TableHead className="text-center">Amount</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {bookings.map((booking) => (
-                  <TableRow key={booking.id}>
-                    <TableCell className="font-mono text-xs">
-                      {booking.id}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-                          <User className="w-4 h-4 text-primary" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">{booking.citizenName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {booking.citizenEmail}
-                          </p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-medium text-sm">
-                      {booking.zoneName}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {booking.wardName}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {format(new Date(booking.time), 'MMM d, h:mm a')}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {booking.duration}h
-                    </TableCell>
-                    <TableCell className="text-center font-medium text-primary">
-                      ₹{booking.amount}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {getStatusBadge(booking.status)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+      {bookings.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No bookings found</p>
+      ) : (
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b">
+              <th className="p-2 text-left">Zone</th>
+              <th className="p-2 text-left">User</th>
+              <th className="p-2 text-left">Amount</th>
+              <th className="p-2 text-left">Payment</th>
+              <th className="p-2 text-left">Status</th>
+              <th className="p-2 text-left">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bookings.map((b) => (
+              <tr key={b.id} className="border-b">
+                <td className="p-2">{zones[b.zoneId]?.name || b.zoneId}</td>
+                <td className="p-2">{b.userId}</td>
+                <td className="p-2">₹{b.amount}</td>
+                <td className="p-2">
+                  {b.paymentStatus === "pending" ? (
+                    <span className="text-orange-500">Pending</span>
+                  ) : (
+                    <span className="text-green-600">Paid</span>
+                  )}
+                </td>
+                <td className="p-2 capitalize">{b.status}</td>
+                <td className="p-2">
+                  {b.paymentStatus === "pending" && (
+                    <button
+                      className="px-3 py-1 bg-amber-500 text-white rounded mr-2"
+                      onClick={() => handleMarkPaid(b.id)}
+                    >
+                      Mark Paid
+                    </button>
+                  )}
+
+                  {b.paymentStatus === "paid" && b.status !== "completed" && (
+                    <button
+                      className="px-3 py-1 bg-blue-600 text-white rounded"
+                      onClick={() => handleMarkCompleted(b)}
+                    >
+                      Complete
+                    </button>
+                  )}
+
+                  {b.status === "completed" && (
+                    <span className="text-green-600 font-medium">Done</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 };

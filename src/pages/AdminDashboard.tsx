@@ -4,7 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 import { fetchParkingZones, updateZoneSlots } from "@/services/zones";
-import { fetchBookings, markBookingPaid } from "@/services/bookings";
+import { fetchBookings, markBookingPaid } from "@/services/bookingService";
 
 import {
   IndianRupee,
