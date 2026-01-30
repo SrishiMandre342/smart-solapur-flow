@@ -21,6 +21,7 @@ import PSIIndicator from "@/components/PSIIndicator";
 import { ParkingZone } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { bookSlot } from "@/services/bookingService";
 import { IndianRupee, Car, MapPin, CheckCircle, Clock, CreditCard } from "lucide-react";
 
 interface BookingModalProps {
@@ -43,23 +44,39 @@ const BookingModal: React.FC<BookingModalProps> = ({ zone, isOpen, onClose }) =>
     if (!zone || !user || !plate.trim()) return;
     setLoading(true);
 
-    // Simulate booking (mock - no backend call)
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      await bookSlot(
+        user.uid,
+        user.email,
+        zone.id,
+        zone.name,
+        plate.trim(),
+        parseInt(duration),
+        totalAmount
+      );
 
-    setLoading(false);
-    setSuccess(true);
+      setLoading(false);
+      setSuccess(true);
 
-    toast({
-      title: "Booking Confirmed!",
-      description: `Your parking at ${zone.name} has been reserved.`,
-    });
+      toast({
+        title: "Booking Confirmed!",
+        description: `Your parking at ${zone.name} has been reserved.`,
+      });
 
-    setTimeout(() => {
-      setSuccess(false);
-      setPlate("");
-      setDuration("1");
-      onClose();
-    }, 1500);
+      setTimeout(() => {
+        setSuccess(false);
+        setPlate("");
+        setDuration("1");
+        onClose();
+      }, 1500);
+    } catch (error) {
+      setLoading(false);
+      toast({
+        title: "Booking Failed",
+        description: "Could not complete booking. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleOpenChange = (open: boolean) => {

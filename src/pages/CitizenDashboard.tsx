@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import DashboardLayout from "@/components/DashboardLayout";
 import CityMap from "@/components/CityMap";
@@ -7,16 +7,57 @@ import LocationSelector from "@/components/LocationSelector";
 import BookingModal from "@/components/BookingModal";
 import NearbyParkingList from "@/components/NearbyParkingList";
 import RouteDisplay from "@/components/RouteDisplay";
-import { parkingZones, trafficZones, getTotalStats } from "@/data/mockData";
+import { Skeleton } from "@/components/ui/skeleton";
 import { solapurLocations, SolapurLocation, getDistance } from "@/data/locations";
-import { ParkingZone } from "@/types";
+import { ParkingZone, TrafficZone } from "@/types";
 import { openGoogleMapsNavigation } from "@/services/navigationService";
+import { listenParkingZones, computeStats } from "@/services/zoneService";
 import { useToast } from "@/hooks/use-toast";
 import { MapPin, Car, Clock, Activity } from "lucide-react";
+
+// Static traffic zones (could be moved to Firestore later)
+const defaultTrafficZones: TrafficZone[] = [
+  {
+    id: "tz-1",
+    name: "Sadar Junction",
+    wardId: "ward-1",
+    wardName: "Sadar Bazaar",
+    lat: 17.6625,
+    lng: 75.9085,
+    congestionLevel: "high",
+    vehicleCount: 450,
+    avgSpeed: 12,
+  },
+  {
+    id: "tz-2",
+    name: "Station Main Road",
+    wardId: "ward-2",
+    wardName: "Railway Station",
+    lat: 17.656,
+    lng: 75.9025,
+    congestionLevel: "moderate",
+    vehicleCount: 280,
+    avgSpeed: 25,
+  },
+  {
+    id: "tz-3",
+    name: "Akkalkot Highway",
+    wardId: "ward-4",
+    wardName: "Akkalkot Road",
+    lat: 17.651,
+    lng: 75.921,
+    congestionLevel: "low",
+    vehicleCount: 80,
+    avgSpeed: 55,
+  },
+];
 
 const CitizenDashboard: React.FC = () => {
   const { toast } = useToast();
 
+  const [parkingZones, setParkingZones] = useState<ParkingZone[]>([]);
+  const [loadingZones, setLoadingZones] = useState(true);
+  
   const [selectedLocation, setSelectedLocation] = useState<SolapurLocation | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
@@ -31,6 +72,16 @@ const CitizenDashboard: React.FC = () => {
   } | null>(null);
 
   const RADIUS_KM = 2.5;
+
+  // Listen to parking zones from Firestore
+  useEffect(() => {
+    const unsubscribe = listenParkingZones((zones) => {
+      setParkingZones(zones);
+      setLoadingZones(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const detectLocation = () => {
     setIsLocating(true);
@@ -80,11 +131,11 @@ const CitizenDashboard: React.FC = () => {
       }))
       .filter((zone) => zone.distance <= RADIUS_KM)
       .sort((a, b) => a.distance - b.distance);
-  }, [currentCenter]);
+  }, [currentCenter, parkingZones]);
 
   const nearbyTraffic = useMemo(() => {
-    if (!currentCenter) return trafficZones;
-    return trafficZones.filter((zone) => {
+    if (!currentCenter) return defaultTrafficZones;
+    return defaultTrafficZones.filter((zone) => {
       const dist = getDistance(currentCenter.lat, currentCenter.lng, zone.lat, zone.lng);
       return dist <= RADIUS_KM * 1.5;
     });
@@ -123,17 +174,27 @@ const CitizenDashboard: React.FC = () => {
     }
   };
 
-  const stats = getTotalStats();
+  const stats = computeStats(parkingZones);
 
   return (
     <DashboardLayout title="Citizen Dashboard">
       <motion.div className="space-y-6">
         {/* Summary Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-          <SummaryCard title="Available Slots" value={stats.availableSlots} icon={Car} variant="success" />
-          <SummaryCard title="Parking Zones" value={stats.totalZones} icon={MapPin} variant="primary" />
-          <SummaryCard title="Avg. Occupancy" value={`${stats.occupancy}%`} icon={Clock} variant="warning" />
-          <SummaryCard title="Avg. PSI" value={stats.avgPsi} icon={Activity} variant="default" />
+          {loadingZones ? (
+            <>
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="h-24 w-full rounded-lg" />
+              ))}
+            </>
+          ) : (
+            <>
+              <SummaryCard title="Available Slots" value={stats.availableSlots} icon={Car} variant="success" />
+              <SummaryCard title="Parking Zones" value={stats.totalZones} icon={MapPin} variant="primary" />
+              <SummaryCard title="Avg. Occupancy" value={`${stats.occupancy}%`} icon={Clock} variant="warning" />
+              <SummaryCard title="Avg. PSI" value={stats.avgPsi} icon={Activity} variant="default" />
+            </>
+          )}
         </div>
 
         {/* Location Selector */}
@@ -153,26 +214,38 @@ const CitizenDashboard: React.FC = () => {
           {/* Map Section - Order changes on mobile */}
           <div className="lg:col-span-3 xl:col-span-2 order-2 lg:order-1">
             <div className="h-[350px] sm:h-[400px] md:h-[450px] lg:h-[550px]">
-              <CityMap
-                parkingZones={nearbyParking}
-                trafficZones={nearbyTraffic}
-                userLocation={currentCenter}
-                onSelectParkingZone={handleSelectParking}
-                selectedZoneId={selectedZone?.id}
-                showRadius
-                radiusKm={RADIUS_KM}
-              />
+              {loadingZones ? (
+                <Skeleton className="w-full h-full rounded-lg" />
+              ) : (
+                <CityMap
+                  parkingZones={nearbyParking}
+                  trafficZones={nearbyTraffic}
+                  userLocation={currentCenter}
+                  onSelectParkingZone={handleSelectParking}
+                  selectedZoneId={selectedZone?.id}
+                  showRadius
+                  radiusKm={RADIUS_KM}
+                />
+              )}
             </div>
           </div>
 
           {/* Parking List - Shows first on mobile */}
           <div className="lg:col-span-2 xl:col-span-1 order-1 lg:order-2">
-            <NearbyParkingList
-              zones={nearbyParking}
-              onSelectZone={handleSelectParking}
-              onNavigate={handleNavigate}
-              selectedZoneId={selectedZone?.id}
-            />
+            {loadingZones ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-32 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : (
+              <NearbyParkingList
+                zones={nearbyParking}
+                onSelectZone={handleSelectParking}
+                onNavigate={handleNavigate}
+                selectedZoneId={selectedZone?.id}
+              />
+            )}
           </div>
         </div>
 

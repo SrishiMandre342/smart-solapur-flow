@@ -1,11 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { parkingZones, getTotalStats } from "@/data/mockData";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { listenParkingZones, computeStats } from "@/services/zoneService";
+import { listenBookings, markBookingPaidAndComplete, BookingData } from "@/services/bookingService";
+import { ParkingZone } from "@/types";
 import {
   IndianRupee,
   Car,
@@ -18,63 +21,55 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-// Mock bookings data for admin
-const mockBookings = [
-  {
-    id: "BK001",
-    userEmail: "citizen@demo.com",
-    zoneName: "Station Road Parking",
-    zoneId: "zone1",
-    amount: 60,
-    status: "ongoing",
-    paymentStatus: "pending",
-  },
-  {
-    id: "BK002",
-    userEmail: "user2@demo.com",
-    zoneName: "Sadar Bazaar Parking",
-    zoneId: "zone2",
-    amount: 80,
-    status: "completed",
-    paymentStatus: "paid",
-  },
-  {
-    id: "BK003",
-    userEmail: "user3@demo.com",
-    zoneName: "MIDC Zone A",
-    zoneId: "zone3",
-    amount: 40,
-    status: "ongoing",
-    paymentStatus: "pending",
-  },
-];
-
 const AdminDashboard = () => {
   const { toast } = useToast();
-  const [zones] = useState(parkingZones);
-  const [bookings, setBookings] = useState(mockBookings);
+  const [zones, setZones] = useState<ParkingZone[]>([]);
+  const [bookings, setBookings] = useState<BookingData[]>([]);
+  const [loadingZones, setLoadingZones] = useState(true);
+  const [loadingBookings, setLoadingBookings] = useState(true);
 
-  const stats = getTotalStats();
-
-  const handleMarkPaid = (bookingId: string) => {
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === bookingId
-          ? { ...b, paymentStatus: "paid", status: "completed" }
-          : b
-      )
-    );
-    toast({
-      title: "Payment Confirmed",
-      description: `Booking ${bookingId} marked as paid`,
+  useEffect(() => {
+    const unsubZones = listenParkingZones((data) => {
+      setZones(data);
+      setLoadingZones(false);
     });
+
+    const unsubBookings = listenBookings((data) => {
+      setBookings(data);
+      setLoadingBookings(false);
+    });
+
+    return () => {
+      unsubZones();
+      unsubBookings();
+    };
+  }, []);
+
+  const stats = computeStats(zones);
+
+  const handleMarkPaid = async (booking: BookingData) => {
+    try {
+      await markBookingPaidAndComplete(booking.id, booking.zoneId, booking.amount);
+      toast({
+        title: "Payment Confirmed",
+        description: `Booking marked as paid and completed`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update booking",
+        variant: "destructive",
+      });
+    }
   };
 
   const totalRevenue = bookings
     .filter((b) => b.paymentStatus === "paid")
-    .reduce((sum, b) => sum + b.amount, 0);
+    .reduce((sum, b) => sum + (b.amount || 0), 0);
 
   const pendingPayments = bookings.filter((b) => b.paymentStatus === "pending");
+
+  const loading = loadingZones || loadingBookings;
 
   return (
     <DashboardLayout title="Admin Dashboard">
@@ -97,10 +92,16 @@ const AdminDashboard = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">₹{totalRevenue}</div>
-                <p className="text-xs text-success flex items-center gap-1 mt-1">
-                  <TrendingUp className="w-3 h-3" /> +12% from yesterday
-                </p>
+                {loading ? (
+                  <Skeleton className="h-8 w-24" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold text-foreground">₹{totalRevenue}</div>
+                    <p className="text-xs text-success flex items-center gap-1 mt-1">
+                      <TrendingUp className="w-3 h-3" /> From paid bookings
+                    </p>
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -112,10 +113,16 @@ const AdminDashboard = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">{stats.totalSlots}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {stats.availableSlots} available
-                </p>
+                {loading ? (
+                  <Skeleton className="h-8 w-24" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold text-foreground">{stats.totalSlots}</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {stats.availableSlots} available
+                    </p>
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -127,8 +134,14 @@ const AdminDashboard = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">{stats.occupancy}%</div>
-                <p className="text-xs text-muted-foreground mt-1">City average</p>
+                {loading ? (
+                  <Skeleton className="h-8 w-24" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold text-foreground">{stats.occupancy}%</div>
+                    <p className="text-xs text-muted-foreground mt-1">City average</p>
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -140,10 +153,16 @@ const AdminDashboard = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">{bookings.length}</div>
-                <p className="text-xs text-warning flex items-center gap-1 mt-1">
-                  <AlertTriangle className="w-3 h-3" /> {pendingPayments.length} pending
-                </p>
+                {loading ? (
+                  <Skeleton className="h-8 w-24" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold text-foreground">{bookings.length}</div>
+                    <p className="text-xs text-warning flex items-center gap-1 mt-1">
+                      <AlertTriangle className="w-3 h-3" /> {pendingPayments.length} pending
+                    </p>
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -155,50 +174,62 @@ const AdminDashboard = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-primary" />
-                Parking Zones
+                Parking Zones ({zones.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left p-3 font-medium text-muted-foreground">Zone</th>
-                      <th className="text-left p-3 font-medium text-muted-foreground">Ward</th>
-                      <th className="text-left p-3 font-medium text-muted-foreground">Slots</th>
-                      <th className="text-left p-3 font-medium text-muted-foreground">PSI</th>
-                      <th className="text-left p-3 font-medium text-muted-foreground">Price/hr</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {zones.map((z) => (
-                      <tr key={z.id} className="border-b border-border/50 hover:bg-muted/30">
-                        <td className="p-3 font-medium text-foreground">{z.name}</td>
-                        <td className="p-3 text-muted-foreground">{z.wardName}</td>
-                        <td className="p-3 text-foreground">
-                          <span className="font-semibold text-success">{z.availableSlots}</span>
-                          /{z.totalSlots}
-                        </td>
-                        <td className="p-3">
-                          <Badge
-                            variant="outline"
-                            className={
-                              z.psi < 40
-                                ? "border-success text-success"
-                                : z.psi < 70
-                                ? "border-warning text-warning"
-                                : "border-destructive text-destructive"
-                            }
-                          >
-                            {z.psi}
-                          </Badge>
-                        </td>
-                        <td className="p-3 text-primary font-medium">₹{z.pricePerHour}</td>
+              {loadingZones ? (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : zones.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No parking zones found. Add zones in Firestore collection "parking_zones".
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left p-3 font-medium text-muted-foreground">Zone</th>
+                        <th className="text-left p-3 font-medium text-muted-foreground">Ward</th>
+                        <th className="text-left p-3 font-medium text-muted-foreground">Slots</th>
+                        <th className="text-left p-3 font-medium text-muted-foreground">PSI</th>
+                        <th className="text-left p-3 font-medium text-muted-foreground">Price/hr</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {zones.map((z) => (
+                        <tr key={z.id} className="border-b border-border/50 hover:bg-muted/30">
+                          <td className="p-3 font-medium text-foreground">{z.name}</td>
+                          <td className="p-3 text-muted-foreground">{z.wardName}</td>
+                          <td className="p-3 text-foreground">
+                            <span className="font-semibold text-success">{z.availableSlots}</span>
+                            /{z.totalSlots}
+                          </td>
+                          <td className="p-3">
+                            <Badge
+                              variant="outline"
+                              className={
+                                z.psi < 40
+                                  ? "border-success text-success"
+                                  : z.psi < 70
+                                  ? "border-warning text-warning"
+                                  : "border-destructive text-destructive"
+                              }
+                            >
+                              {z.psi}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-primary font-medium">₹{z.pricePerHour}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -209,60 +240,72 @@ const AdminDashboard = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Ticket className="w-5 h-5 text-primary" />
-                Bookings
+                Bookings ({bookings.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="p-3 text-left font-medium text-muted-foreground">User</th>
-                      <th className="p-3 text-left font-medium text-muted-foreground">Zone</th>
-                      <th className="p-3 text-left font-medium text-muted-foreground">Amount</th>
-                      <th className="p-3 text-left font-medium text-muted-foreground">Payment</th>
-                      <th className="p-3 text-left font-medium text-muted-foreground">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bookings.map((b) => (
-                      <tr key={b.id} className="border-b border-border/50 hover:bg-muted/30">
-                        <td className="p-3 text-foreground">{b.userEmail}</td>
-                        <td className="p-3 text-foreground">{b.zoneName}</td>
-                        <td className="p-3 font-medium text-foreground">₹{b.amount}</td>
-                        <td className="p-3">
-                          <Badge
-                            variant={b.paymentStatus === "pending" ? "outline" : "default"}
-                            className={
-                              b.paymentStatus === "pending"
-                                ? "border-warning text-warning"
-                                : "bg-success text-success-foreground"
-                            }
-                          >
-                            {b.paymentStatus}
-                          </Badge>
-                        </td>
-                        <td className="p-3">
-                          {b.paymentStatus === "pending" ? (
-                            <Button
-                              size="sm"
-                              onClick={() => handleMarkPaid(b.id)}
-                              className="bg-success hover:bg-success/90"
-                            >
-                              <CheckCircle className="w-4 h-4 mr-1" />
-                              Mark Paid
-                            </Button>
-                          ) : (
-                            <span className="text-success flex items-center gap-1">
-                              <CheckCircle className="w-4 h-4" /> Paid
-                            </span>
-                          )}
-                        </td>
+              {loadingBookings ? (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : bookings.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No bookings yet. Bookings will appear here in real-time.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="p-3 text-left font-medium text-muted-foreground">User</th>
+                        <th className="p-3 text-left font-medium text-muted-foreground">Zone</th>
+                        <th className="p-3 text-left font-medium text-muted-foreground">Amount</th>
+                        <th className="p-3 text-left font-medium text-muted-foreground">Payment</th>
+                        <th className="p-3 text-left font-medium text-muted-foreground">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {bookings.map((b) => (
+                        <tr key={b.id} className="border-b border-border/50 hover:bg-muted/30">
+                          <td className="p-3 text-foreground">{b.userEmail}</td>
+                          <td className="p-3 text-foreground">{b.zoneName}</td>
+                          <td className="p-3 font-medium text-foreground">₹{b.amount}</td>
+                          <td className="p-3">
+                            <Badge
+                              variant={b.paymentStatus === "pending" ? "outline" : "default"}
+                              className={
+                                b.paymentStatus === "pending"
+                                  ? "border-warning text-warning"
+                                  : "bg-success text-success-foreground"
+                              }
+                            >
+                              {b.paymentStatus}
+                            </Badge>
+                          </td>
+                          <td className="p-3">
+                            {b.paymentStatus === "pending" ? (
+                              <Button
+                                size="sm"
+                                onClick={() => handleMarkPaid(b)}
+                                className="bg-success hover:bg-success/90"
+                              >
+                                <CheckCircle className="w-4 h-4 mr-1" />
+                                Mark Paid
+                              </Button>
+                            ) : (
+                              <span className="text-success flex items-center gap-1">
+                                <CheckCircle className="w-4 h-4" /> Paid
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -277,33 +320,40 @@ const AdminDashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="p-3 rounded-lg bg-warning/10 border border-warning/30 flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-foreground">High PSI Alert</p>
-                  <p className="text-sm text-muted-foreground">
-                    Station Road Parking has reached 85% capacity
-                  </p>
+              {zones.filter((z) => z.psi >= 70).length > 0 ? (
+                zones
+                  .filter((z) => z.psi >= 70)
+                  .map((zone) => (
+                    <div
+                      key={zone.id}
+                      className="p-3 rounded-lg bg-warning/10 border border-warning/30 flex items-start gap-3"
+                    >
+                      <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-foreground">High PSI Alert</p>
+                        <p className="text-sm text-muted-foreground">
+                          {zone.name} has reached {zone.psi}% capacity
+                        </p>
+                      </div>
+                    </div>
+                  ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No critical alerts at this time
+                </p>
+              )}
+              
+              {pendingPayments.length > 3 && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-foreground">Pending Payments</p>
+                    <p className="text-sm text-muted-foreground">
+                      {pendingPayments.length} bookings with pending payment
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-foreground">Traffic Congestion</p>
-                  <p className="text-sm text-muted-foreground">
-                    Heavy congestion detected on Akkalkot Road
-                  </p>
-                </div>
-              </div>
-              <div className="p-3 rounded-lg bg-muted border border-border flex items-start gap-3">
-                <Bell className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-foreground">System Update</p>
-                  <p className="text-sm text-muted-foreground">
-                    Parking rates updated for all zones
-                  </p>
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

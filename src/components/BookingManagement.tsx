@@ -1,86 +1,77 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle, Clock, User, MapPin, IndianRupee } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-interface Booking {
-  id: string;
-  userId: string;
-  userEmail?: string;
-  zoneName: string;
-  zoneId: string;
-  amount: number;
-  status: "ongoing" | "completed";
-  paymentStatus: "pending" | "paid";
-  createdAt?: Date;
-}
-
-// Mock bookings data
-const mockBookings: Booking[] = [
-  {
-    id: "BK001",
-    userId: "user1",
-    userEmail: "citizen@demo.com",
-    zoneName: "Station Road Parking",
-    zoneId: "zone1",
-    amount: 60,
-    status: "ongoing",
-    paymentStatus: "pending",
-    createdAt: new Date(),
-  },
-  {
-    id: "BK002",
-    userId: "user2",
-    userEmail: "user2@demo.com",
-    zoneName: "Sadar Bazaar Parking",
-    zoneId: "zone2",
-    amount: 80,
-    status: "completed",
-    paymentStatus: "paid",
-    createdAt: new Date(Date.now() - 3600000),
-  },
-  {
-    id: "BK003",
-    userId: "user3",
-    userEmail: "user3@demo.com",
-    zoneName: "MIDC Zone A",
-    zoneId: "zone3",
-    amount: 40,
-    status: "ongoing",
-    paymentStatus: "pending",
-    createdAt: new Date(Date.now() - 1800000),
-  },
-];
+import {
+  listenBookings,
+  markPaid,
+  markCompleted,
+  BookingData
+} from "@/services/bookingService";
 
 const BookingManagement: React.FC = () => {
   const { toast } = useToast();
-  const [bookings, setBookings] = useState<Booking[]>(mockBookings);
+  const [bookings, setBookings] = useState<BookingData[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleMarkPaid = (id: string) => {
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === id ? { ...b, paymentStatus: "paid" as const } : b
-      )
-    );
-    toast({
-      title: "Payment Marked",
-      description: `Booking ${id} marked as paid`,
+  useEffect(() => {
+    const unsubscribe = listenBookings((data) => {
+      setBookings(data);
+      setLoading(false);
     });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleMarkPaid = async (id: string) => {
+    try {
+      await markPaid(id);
+      toast({
+        title: "Payment Marked",
+        description: `Booking ${id.slice(0, 8)}... marked as paid`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to mark as paid",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleMarkCompleted = (booking: Booking) => {
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === booking.id ? { ...b, status: "completed" as const } : b
-      )
-    );
-    toast({
-      title: "Booking Completed",
-      description: `Booking ${booking.id} marked as complete`,
-    });
+  const handleMarkCompleted = async (booking: BookingData) => {
+    try {
+      await markCompleted(booking.id, booking.zoneId);
+      toast({
+        title: "Booking Completed",
+        description: `Booking ${booking.id.slice(0, 8)}... marked as complete`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to complete booking",
+        variant: "destructive",
+      });
+    }
   };
+
+  if (loading) {
+    return (
+      <Card className="border-border bg-card">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">Booking Management</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="border-border bg-card">
@@ -89,7 +80,9 @@ const BookingManagement: React.FC = () => {
       </CardHeader>
       <CardContent>
         {bookings.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No bookings found</p>
+          <p className="text-sm text-muted-foreground text-center py-8">
+            No bookings yet. Bookings will appear here in real-time.
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">

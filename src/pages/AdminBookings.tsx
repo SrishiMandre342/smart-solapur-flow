@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { markBookingPaid } from "@/services/bookingService";
+import { markBookingPaidAndComplete } from "@/services/bookingService";
 import { toast } from "@/hooks/use-toast";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/firebase/firebase";
@@ -35,7 +35,7 @@ const AdminBookings: React.FC = () => {
     setLoadingId(b.id);
 
     try {
-      await markBookingPaid(b.id, b.zoneId, b.amount);
+      await markBookingPaidAndComplete(b.id, b.zoneId, b.amount);
       toast({
         title: "Payment Recorded",
         description: `₹${b.amount} received for ${b.zoneName}`,
