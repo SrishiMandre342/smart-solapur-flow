@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import PaymentStatusBadge from '@/components/PaymentStatusBadge';
 import { DataTable } from '@/components/ui/data-table';
-import { Booking } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { listenUserBookings, BookingData } from '@/services/bookingService';
 import {
   Ticket,
   MapPin,
@@ -19,82 +20,24 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 
-// Mock booking data
-const mockBookings: Booking[] = [
-  {
-    id: 'BK001',
-    zoneId: 'pz-1',
-    zoneName: 'Sadar Main Parking',
-    wardName: 'Sadar Bazaar',
-    citizenEmail: 'user@example.com',
-    citizenName: 'User',
-    startTime: '2026-01-27T09:00:00',
-    endTime: '2026-01-27T11:00:00',
-    duration: 2,
-    amount: 60,
-    status: 'active',
-    paymentStatus: 'pending',
-  },
-  {
-    id: 'BK002',
-    zoneId: 'pz-5',
-    zoneName: 'Station Front Parking',
-    wardName: 'Railway Station',
-    startTime: '2026-01-27T14:00:00',
-    endTime: '2026-01-27T16:00:00',
-    duration: 2,
-    amount: 80,
-    status: 'reserved',
-    paymentStatus: 'pending',
-    citizenEmail: 'user@example.com',
-    citizenName: 'User',
-  },
-  {
-    id: 'BK003',
-    zoneId: 'pz-3',
-    zoneName: 'Chowk Parking',
-    wardName: 'Sadar Bazaar',
-    startTime: '2026-01-26T10:00:00',
-    endTime: '2026-01-26T12:00:00',
-    duration: 2,
-    amount: 70,
-    status: 'completed',
-    paymentStatus: 'paid',
-    citizenEmail: 'user@example.com',
-    citizenName: 'User',
-  },
-  {
-    id: 'BK004',
-    zoneId: 'pz-8',
-    zoneName: 'Temple Parking',
-    wardName: 'Siddheshwar Peth',
-    startTime: '2026-01-25T08:00:00',
-    endTime: '2026-01-25T10:00:00',
-    duration: 2,
-    amount: 40,
-    status: 'completed',
-    paymentStatus: 'paid',
-    citizenEmail: 'user@example.com',
-    citizenName: 'User',
-  },
-  {
-    id: 'BK005',
-    zoneId: 'pz-13',
-    zoneName: 'Commercial Hub Parking',
-    wardName: 'Murarji Peth',
-    startTime: '2026-01-24T14:00:00',
-    endTime: '2026-01-24T18:00:00',
-    duration: 4,
-    amount: 100,
-    status: 'completed',
-    paymentStatus: 'paid',
-    citizenEmail: 'user@example.com',
-    citizenName: 'User',
-  },
-];
-
 const MyBookingsPage: React.FC = () => {
-  const [bookings] = useState<Booking[]>(mockBookings);
+  const { user } = useAuth();
+  const [bookings, setBookings] = useState<BookingData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setLoading(false);
+      return;
+    }
+
+    const unsub = listenUserBookings(user.uid, (data) => {
+      setBookings(data);
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, [user?.uid]);
 
   const activeBookings = bookings.filter(b => 
     b.status === 'active' || b.status === 'reserved'
@@ -103,7 +46,7 @@ const MyBookingsPage: React.FC = () => {
     b.status === 'completed' || b.status === 'cancelled' || b.status === 'expired'
   );
 
-  const getStatusBadge = (status: Booking['status']) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active':
         return (
@@ -145,33 +88,61 @@ const MyBookingsPage: React.FC = () => {
     }
   };
 
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return 'N/A';
+    if (timestamp.toDate) {
+      return format(timestamp.toDate(), 'MMM d, yyyy');
+    }
+    if (timestamp instanceof Date) {
+      return format(timestamp, 'MMM d, yyyy');
+    }
+    if (typeof timestamp === 'string') {
+      return format(new Date(timestamp), 'MMM d, yyyy');
+    }
+    return 'N/A';
+  };
+
+  const formatTime = (timestamp: any) => {
+    if (!timestamp) return '';
+    if (timestamp.toDate) {
+      return format(timestamp.toDate(), 'h:mm a');
+    }
+    if (timestamp instanceof Date) {
+      return format(timestamp, 'h:mm a');
+    }
+    if (typeof timestamp === 'string') {
+      return format(new Date(timestamp), 'h:mm a');
+    }
+    return '';
+  };
+
   const columns = [
     {
       key: 'zoneName',
       label: 'Zone',
       sortable: true,
-      render: (booking: Booking) => (
+      render: (booking: BookingData) => (
         <div>
           <p className="font-medium text-foreground">{booking.zoneName}</p>
           <p className="text-xs text-muted-foreground flex items-center gap-1">
             <MapPin className="w-3 h-3" />
-            {booking.wardName}
+            {booking.zoneId}
           </p>
         </div>
       ),
     },
     {
-      key: 'startTime',
-      label: 'Time',
+      key: 'createdAt',
+      label: 'Date',
       sortable: true,
-      render: (booking: Booking) => (
+      render: (booking: BookingData) => (
         <div className="text-sm">
           <p className="flex items-center gap-1">
             <Calendar className="w-3 h-3 text-muted-foreground" />
-            {format(new Date(booking.startTime), 'MMM d, yyyy')}
+            {formatDate(booking.createdAt)}
           </p>
           <p className="text-xs text-muted-foreground">
-            {format(new Date(booking.startTime), 'h:mm a')} - {format(new Date(booking.endTime), 'h:mm a')}
+            {formatTime(booking.createdAt)}
           </p>
         </div>
       ),
@@ -179,7 +150,7 @@ const MyBookingsPage: React.FC = () => {
     {
       key: 'duration',
       label: 'Duration',
-      render: (booking: Booking) => (
+      render: (booking: BookingData) => (
         <span className="text-sm">{booking.duration}h</span>
       ),
     },
@@ -187,7 +158,7 @@ const MyBookingsPage: React.FC = () => {
       key: 'amount',
       label: 'Amount',
       sortable: true,
-      render: (booking: Booking) => (
+      render: (booking: BookingData) => (
         <span className="font-semibold text-primary flex items-center gap-1">
           <IndianRupee className="w-3 h-3" />
           {booking.amount}
@@ -197,16 +168,39 @@ const MyBookingsPage: React.FC = () => {
     {
       key: 'status',
       label: 'Status',
-      render: (booking: Booking) => getStatusBadge(booking.status),
+      render: (booking: BookingData) => getStatusBadge(booking.status),
     },
     {
       key: 'paymentStatus',
       label: 'Payment',
-      render: (booking: Booking) => (
+      render: (booking: BookingData) => (
         <PaymentStatusBadge status={booking.paymentStatus} size="sm" />
       ),
     },
   ];
+
+  if (loading) {
+    return (
+      <DashboardLayout title="My Bookings">
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardContent className="p-4">
+                  <Skeleton className="h-16 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <Card>
+            <CardContent className="p-6">
+              <Skeleton className="h-64 w-full" />
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="My Bookings">
@@ -264,7 +258,7 @@ const MyBookingsPage: React.FC = () => {
                 <div>
                   <p className="text-sm text-muted-foreground">Total Spent</p>
                   <p className="text-xl font-bold">
-                    ₹{bookings.reduce((sum, b) => sum + b.amount, 0)}
+                    ₹{bookings.reduce((sum, b) => sum + (b.amount || 0), 0)}
                   </p>
                 </div>
               </div>
@@ -281,36 +275,44 @@ const MyBookingsPage: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="active" className="w-full">
-              <TabsList className="mb-4">
-                <TabsTrigger value="active">
-                  Active ({activeBookings.length})
-                </TabsTrigger>
-                <TabsTrigger value="completed">
-                  Completed ({completedBookings.length})
-                </TabsTrigger>
-              </TabsList>
+            {bookings.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Ticket className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p className="text-lg font-medium">No bookings yet</p>
+                <p className="text-sm">Your booking history will appear here</p>
+              </div>
+            ) : (
+              <Tabs defaultValue="active" className="w-full">
+                <TabsList className="mb-4">
+                  <TabsTrigger value="active">
+                    Active ({activeBookings.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="completed">
+                    Completed ({completedBookings.length})
+                  </TabsTrigger>
+                </TabsList>
 
-              <TabsContent value="active">
-                <DataTable
-                  data={activeBookings}
-                  columns={columns}
-                  searchKey="zoneName"
-                  searchPlaceholder="Search by zone name..."
-                  emptyMessage="No active bookings"
-                />
-              </TabsContent>
+                <TabsContent value="active">
+                  <DataTable
+                    data={activeBookings}
+                    columns={columns}
+                    searchKey="zoneName"
+                    searchPlaceholder="Search by zone name..."
+                    emptyMessage="No active bookings"
+                  />
+                </TabsContent>
 
-              <TabsContent value="completed">
-                <DataTable
-                  data={completedBookings}
-                  columns={columns}
-                  searchKey="zoneName"
-                  searchPlaceholder="Search by zone name..."
-                  emptyMessage="No completed bookings"
-                />
-              </TabsContent>
-            </Tabs>
+                <TabsContent value="completed">
+                  <DataTable
+                    data={completedBookings}
+                    columns={columns}
+                    searchKey="zoneName"
+                    searchPlaceholder="Search by zone name..."
+                    emptyMessage="No completed bookings"
+                  />
+                </TabsContent>
+              </Tabs>
+            )}
           </CardContent>
         </Card>
       </motion.div>

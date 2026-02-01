@@ -12,11 +12,8 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import {
-  ParkingZone,
-  TrafficZone,
-  SOLAPUR_CENTER,
-} from "@/data/mockData";
+import { ParkingZone, TrafficZone } from "@/types";
+import { SOLAPUR_CENTER } from "@/lib/constants";
 import PSIIndicator from "@/components/PSIIndicator";
 import TrafficBadge from "@/components/TrafficBadge";
 import { Button } from "@/components/ui/button";

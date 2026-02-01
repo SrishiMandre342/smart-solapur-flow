@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -22,9 +22,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DataTable } from '@/components/ui/data-table';
+import { Skeleton } from '@/components/ui/skeleton';
 import PSIIndicator from '@/components/PSIIndicator';
-import { ParkingZone } from '@/types';
-import { parkingZones as mockZones, wards } from '@/data/mockData';
+import { ParkingZone, Ward } from '@/types';
+import { listenParkingZones } from '@/services/zoneService';
+import { listenWards, staticWards } from '@/services/wardService';
 import {
   Plus,
   MapPin,
@@ -35,9 +37,13 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { db } from '@/firebase/firebase';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 
 const AdminZones: React.FC = () => {
-  const [zones, setZones] = useState<ParkingZone[]>(mockZones);
+  const [zones, setZones] = useState<ParkingZone[]>([]);
+  const [wards, setWards] = useState<Ward[]>(staticWards);
+  const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -57,6 +63,25 @@ const AdminZones: React.FC = () => {
     status: 'open' as 'open' | 'closed',
   });
 
+  // Real-time listeners
+  useEffect(() => {
+    const unsubZones = listenParkingZones((data) => {
+      setZones(data);
+      setLoading(false);
+    });
+
+    const unsubWards = listenWards((data) => {
+      if (data.length > 0) {
+        setWards(data);
+      }
+    });
+
+    return () => {
+      unsubZones();
+      unsubWards();
+    };
+  }, []);
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -72,69 +97,96 @@ const AdminZones: React.FC = () => {
     });
   };
 
-  const handleAdd = () => {
-    const newZone: ParkingZone = {
-      id: `pz-${Date.now()}`,
-      name: formData.name,
-      wardId: formData.wardId,
-      wardName: formData.wardName,
-      lat: parseFloat(formData.lat),
-      lng: parseFloat(formData.lng),
-      totalSlots: parseInt(formData.totalSlots),
-      availableSlots: parseInt(formData.availableSlots),
-      pricePerHour: parseInt(formData.pricePerHour),
-      psi: parseInt(formData.psi),
-      status: formData.status,
-    };
-    setZones([...zones, newZone]);
-    setIsAddModalOpen(false);
-    resetForm();
-    toast({
-      title: 'Zone Added',
-      description: `${newZone.name} has been created.`,
-    });
+  const handleAdd = async () => {
+    try {
+      const ref = collection(db, 'parking_zones');
+      await addDoc(ref, {
+        name: formData.name,
+        wardId: formData.wardId,
+        wardName: formData.wardName,
+        lat: parseFloat(formData.lat),
+        lng: parseFloat(formData.lng),
+        totalSlots: parseInt(formData.totalSlots),
+        availableSlots: parseInt(formData.availableSlots),
+        pricePerHour: parseInt(formData.pricePerHour),
+        psi: parseInt(formData.psi),
+        status: formData.status,
+        createdAt: serverTimestamp(),
+      });
+
+      setIsAddModalOpen(false);
+      resetForm();
+      toast({
+        title: 'Zone Added',
+        description: `${formData.name} has been created.`,
+      });
+    } catch (error) {
+      console.error('Error adding zone:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add zone',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleEdit = () => {
+  const handleEdit = async () => {
     if (!selectedZone) return;
-    setZones(prev =>
-      prev.map(z =>
-        z.id === selectedZone.id
-          ? {
-              ...z,
-              name: formData.name,
-              wardId: formData.wardId,
-              wardName: formData.wardName,
-              lat: parseFloat(formData.lat),
-              lng: parseFloat(formData.lng),
-              totalSlots: parseInt(formData.totalSlots),
-              availableSlots: parseInt(formData.availableSlots),
-              pricePerHour: parseInt(formData.pricePerHour),
-              psi: parseInt(formData.psi),
-              status: formData.status,
-            }
-          : z
-      )
-    );
-    setIsEditModalOpen(false);
-    setSelectedZone(null);
-    resetForm();
-    toast({
-      title: 'Zone Updated',
-      description: 'The parking zone has been updated.',
-    });
+
+    try {
+      const ref = doc(db, 'parking_zones', selectedZone.id);
+      await updateDoc(ref, {
+        name: formData.name,
+        wardId: formData.wardId,
+        wardName: formData.wardName,
+        lat: parseFloat(formData.lat),
+        lng: parseFloat(formData.lng),
+        totalSlots: parseInt(formData.totalSlots),
+        availableSlots: parseInt(formData.availableSlots),
+        pricePerHour: parseInt(formData.pricePerHour),
+        psi: parseInt(formData.psi),
+        status: formData.status,
+      });
+
+      setIsEditModalOpen(false);
+      setSelectedZone(null);
+      resetForm();
+      toast({
+        title: 'Zone Updated',
+        description: 'The parking zone has been updated.',
+      });
+    } catch (error) {
+      console.error('Error updating zone:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update zone',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selectedZone) return;
-    setZones(prev => prev.filter(z => z.id !== selectedZone.id));
-    setIsDeleteModalOpen(false);
-    toast({
-      title: 'Zone Deleted',
-      description: `${selectedZone.name} has been removed.`,
-      variant: 'destructive',
-    });
-    setSelectedZone(null);
+
+    try {
+      const ref = doc(db, 'parking_zones', selectedZone.id);
+      await deleteDoc(ref);
+
+      setIsDeleteModalOpen(false);
+      toast({
+        title: 'Zone Deleted',
+        description: `${selectedZone.name} has been removed.`,
+        variant: 'destructive',
+      });
+      setSelectedZone(null);
+    } catch (error) {
+      console.error('Error deleting zone:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete zone',
+        variant: 'destructive',
+      });
+    }
   };
 
   const openEditModal = (zone: ParkingZone) => {
@@ -248,6 +300,29 @@ const AdminZones: React.FC = () => {
   const totalSlots = zones.reduce((sum, z) => sum + z.totalSlots, 0);
   const availableSlots = zones.reduce((sum, z) => sum + z.availableSlots, 0);
 
+  if (loading) {
+    return (
+      <DashboardLayout title="Zone Management">
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardContent className="p-4">
+                  <Skeleton className="h-16 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <Card>
+            <CardContent className="p-6">
+              <Skeleton className="h-64 w-full" />
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout title="Zone Management">
       <motion.div
@@ -305,7 +380,7 @@ const AdminZones: React.FC = () => {
                 <div>
                   <p className="text-sm text-muted-foreground">Occupancy</p>
                   <p className="text-xl font-bold">
-                    {Math.round(((totalSlots - availableSlots) / totalSlots) * 100)}%
+                    {totalSlots > 0 ? Math.round(((totalSlots - availableSlots) / totalSlots) * 100) : 0}%
                   </p>
                 </div>
               </div>
@@ -329,12 +404,20 @@ const AdminZones: React.FC = () => {
             </Button>
           </CardHeader>
           <CardContent>
-            <DataTable
-              data={zones}
-              columns={columns}
-              searchKey="name"
-              searchPlaceholder="Search zones..."
-            />
+            {zones.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Car className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p className="text-lg font-medium">No parking zones yet</p>
+                <p className="text-sm">Click "Add Zone" to create your first parking zone</p>
+              </div>
+            ) : (
+              <DataTable
+                data={zones}
+                columns={columns}
+                searchKey="name"
+                searchPlaceholder="Search zones..."
+              />
+            )}
           </CardContent>
         </Card>
       </motion.div>
@@ -500,7 +583,7 @@ const AdminZones: React.FC = () => {
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleDelete}>
-              Delete
+              Delete Zone
             </Button>
           </DialogFooter>
         </DialogContent>

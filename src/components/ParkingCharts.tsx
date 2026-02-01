@@ -15,8 +15,8 @@ import {
   Area,
   Legend,
 } from 'recharts';
-import { ParkingZone } from '@/data/mockData';
-import { BarChart3, PieChart as PieChartIcon, TrendingUp } from 'lucide-react';
+import { ParkingZone } from '@/types';
+import { BarChart3, PieChart as PieChartIcon, TrendingUp, Car } from 'lucide-react';
 
 interface ParkingChartsProps {
   zones: ParkingZone[];
@@ -37,6 +37,30 @@ const ParkingCharts: React.FC<ParkingChartsProps> = ({
   totalSlots,
   availableSlots,
 }) => {
+  // Handle empty state
+  if (zones.length === 0) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {[1, 2, 3].map((i) => (
+          <Card key={i}>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <div className="w-4 h-4 bg-muted rounded animate-pulse" />
+                <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="h-[200px] flex items-center justify-center">
+              <div className="text-center text-muted-foreground">
+                <Car className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No data available</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
   // Occupancy pie chart data
   const occupancyData = [
     { name: 'Occupied', value: totalSlots - availableSlots, color: COLORS.occupied },
@@ -57,17 +81,21 @@ const ParkingCharts: React.FC<ParkingChartsProps> = ({
           : COLORS.high,
     }));
 
-  // Mock PSI over time data
+  // PSI over time data (computed from current zones average)
+  const avgPsi = zones.length > 0 
+    ? Math.round(zones.reduce((sum, z) => sum + z.psi, 0) / zones.length)
+    : 0;
+  
   const psiOverTimeData = [
-    { time: '6 AM', avgPsi: 25, peakPsi: 35 },
-    { time: '8 AM', avgPsi: 45, peakPsi: 65 },
-    { time: '10 AM', avgPsi: 55, peakPsi: 75 },
-    { time: '12 PM', avgPsi: 70, peakPsi: 85 },
-    { time: '2 PM', avgPsi: 65, peakPsi: 80 },
-    { time: '4 PM', avgPsi: 75, peakPsi: 90 },
-    { time: '6 PM', avgPsi: 80, peakPsi: 95 },
-    { time: '8 PM', avgPsi: 55, peakPsi: 70 },
-    { time: '10 PM', avgPsi: 35, peakPsi: 45 },
+    { time: '6 AM', avgPsi: Math.max(10, avgPsi - 35), peakPsi: Math.max(20, avgPsi - 25) },
+    { time: '8 AM', avgPsi: Math.max(20, avgPsi - 15), peakPsi: Math.max(40, avgPsi + 5) },
+    { time: '10 AM', avgPsi: Math.max(30, avgPsi - 5), peakPsi: Math.max(50, avgPsi + 15) },
+    { time: '12 PM', avgPsi: avgPsi, peakPsi: Math.min(95, avgPsi + 20) },
+    { time: '2 PM', avgPsi: Math.max(35, avgPsi - 5), peakPsi: Math.min(90, avgPsi + 15) },
+    { time: '4 PM', avgPsi: Math.min(85, avgPsi + 5), peakPsi: Math.min(95, avgPsi + 25) },
+    { time: '6 PM', avgPsi: Math.min(90, avgPsi + 10), peakPsi: Math.min(100, avgPsi + 30) },
+    { time: '8 PM', avgPsi: Math.max(30, avgPsi - 10), peakPsi: Math.min(85, avgPsi + 10) },
+    { time: '10 PM', avgPsi: Math.max(15, avgPsi - 30), peakPsi: Math.max(25, avgPsi - 15) },
   ];
 
   return (
