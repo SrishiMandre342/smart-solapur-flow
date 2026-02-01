@@ -23,7 +23,7 @@ export interface BookingData {
   plateNumber: string;
   duration: number;
   amount: number;
-  status: "active" | "completed";
+  status: "active" | "completed" | "reserved" | "cancelled" | "expired";
   paymentStatus: "pending" | "paid";
   createdAt: any;
   paidAt?: any;

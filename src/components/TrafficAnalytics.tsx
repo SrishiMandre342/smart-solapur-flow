@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { TrafficZone } from '@/data/mockData';
+import { TrafficZone } from '@/types';
 import TrafficBadge from '@/components/TrafficBadge';
 import { AlertTriangle, Gauge, Car } from 'lucide-react';
 
@@ -25,6 +25,36 @@ const COLORS = {
 };
 
 const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ trafficZones }) => {
+  // Handle empty state
+  if (trafficZones.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-muted animate-pulse" />
+                  <div className="space-y-2">
+                    <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+                    <div className="h-5 w-12 bg-muted animate-pulse rounded" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <Card>
+          <CardContent className="p-8 text-center text-muted-foreground">
+            <Car className="w-12 h-12 mx-auto mb-2 opacity-50" />
+            <p>No traffic data available</p>
+            <p className="text-sm">Add traffic zones to Firestore to see analytics</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // Top 3 worst congestion points
   const worstCongestion = [...trafficZones]
     .sort((a, b) => {

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Notification } from '@/data/bookings';
+import { Notification } from '@/types';
 import {
   Bell,
   AlertTriangle,
@@ -12,6 +12,7 @@ import {
   Info,
   X,
   Check,
+  CheckCircle,
 } from 'lucide-react';
 
 interface NotificationsPanelProps {
@@ -37,6 +38,8 @@ const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
         return <AlertTriangle className="w-4 h-4 text-warning" />;
       case 'info':
         return <Info className="w-4 h-4 text-info" />;
+      case 'success':
+        return <CheckCircle className="w-4 h-4 text-success" />;
     }
   };
 
@@ -48,6 +51,8 @@ const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
         return 'bg-warning/10 text-warning border-warning/20';
       case 'info':
         return 'bg-info/10 text-info border-info/20';
+      case 'success':
+        return 'bg-success/10 text-success border-success/20';
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Dialog,
@@ -31,7 +31,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import PSIIndicator from '@/components/PSIIndicator';
-import { ParkingZone, wards } from '@/data/mockData';
+import { ParkingZone, Ward } from '@/types';
+import { listenWards, staticWards } from '@/services/wardService';
 import {
   Plus,
   Edit,
@@ -73,6 +74,7 @@ const ZoneManagement: React.FC<ZoneManagementProps> = ({
   onEditZone,
   onDeleteZone,
 }) => {
+  const [wards, setWards] = useState<Ward[]>(staticWards);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -80,6 +82,16 @@ const ZoneManagement: React.FC<ZoneManagementProps> = ({
   const [formData, setFormData] = useState(initialFormState);
   const [searchQuery, setSearchQuery] = useState('');
   const { toast } = useToast();
+
+  // Listen to wards from Firestore (fallback to static)
+  useEffect(() => {
+    const unsub = listenWards((data) => {
+      if (data.length > 0) {
+        setWards(data);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Add status to zones for display
   const extendedZones: ExtendedParkingZone[] = zones.map((zone) => ({
@@ -334,73 +346,81 @@ const ZoneManagement: React.FC<ZoneManagementProps> = ({
 
         {/* Table */}
         <ScrollArea className="h-[400px]">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Zone Name</TableHead>
-                <TableHead>Ward</TableHead>
-                <TableHead className="text-center">Slots</TableHead>
-                <TableHead className="text-center">PSI</TableHead>
-                <TableHead className="text-center">Price</TableHead>
-                <TableHead className="text-center">Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredZones.map((zone) => (
-                <TableRow key={zone.id}>
-                  <TableCell className="font-medium">{zone.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{zone.wardName}</TableCell>
-                  <TableCell className="text-center">
-                    {zone.availableSlots}/{zone.totalSlots}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <PSIIndicator value={zone.psi} size="sm" showLabel={false} />
-                  </TableCell>
-                  <TableCell className="text-center font-medium">
-                    ₹{zone.pricePerHour}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge
-                      variant={zone.status === 'open' ? 'default' : 'secondary'}
-                      className={
-                        zone.status === 'open'
-                          ? 'bg-success/10 text-success'
-                          : 'bg-muted text-muted-foreground'
-                      }
-                    >
-                      {zone.status === 'open' ? (
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                      ) : (
-                        <XCircle className="w-3 h-3 mr-1" />
-                      )}
-                      {zone.status === 'open' ? 'Open' : 'Closed'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => openEditModal(zone)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => openDeleteModal(zone)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+          {filteredZones.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Car className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p>No parking zones found</p>
+              <p className="text-sm">Add zones from Firestore or click "Add Zone"</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Zone Name</TableHead>
+                  <TableHead>Ward</TableHead>
+                  <TableHead className="text-center">Slots</TableHead>
+                  <TableHead className="text-center">PSI</TableHead>
+                  <TableHead className="text-center">Price</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredZones.map((zone) => (
+                  <TableRow key={zone.id}>
+                    <TableCell className="font-medium">{zone.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{zone.wardName}</TableCell>
+                    <TableCell className="text-center">
+                      {zone.availableSlots}/{zone.totalSlots}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <PSIIndicator value={zone.psi} size="sm" showLabel={false} />
+                    </TableCell>
+                    <TableCell className="text-center font-medium">
+                      ₹{zone.pricePerHour}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge
+                        variant={zone.status === 'open' ? 'default' : 'secondary'}
+                        className={
+                          zone.status === 'open'
+                            ? 'bg-success/10 text-success'
+                            : 'bg-muted text-muted-foreground'
+                        }
+                      >
+                        {zone.status === 'open' ? (
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                        ) : (
+                          <XCircle className="w-3 h-3 mr-1" />
+                        )}
+                        {zone.status === 'open' ? 'Open' : 'Closed'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => openEditModal(zone)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => openDeleteModal(zone)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </ScrollArea>
       </CardContent>
 
