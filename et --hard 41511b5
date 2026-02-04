@@ -1,0 +1,28 @@
+*   [33m875e932[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Migrate to Firestore real-time
+[31m|[m[32m\[m  
+[31m|[m * [33m41511b5[m Changes
+[31m|[m[31m/[m  
+*   [33m926b376[m Real-time Firestore UI upgrade
+[33m|[m[34m\[m  
+[33m|[m * [33mad8ce41[m Changes
+[33m|[m[33m/[m  
+*   [33m619ca53[m UI polish and phase phase2 fixes
+[35m|[m[36m\[m  
+[35m|[m * [33m2e69f67[m Changes
+[35m|[m[35m/[m  
+* [33mb16617e[m checkpoint: booking flow + admin mark paid backend integration
+*   [33m1e6f88f[m Enhance SmartFlow Solapur UI
+[1;31m|[m[1;32m\[m  
+[1;31m|[m * [33m623561b[m Changes
+[1;31m|[m[1;31m/[m  
+* [33m8f34b44[m Setup Firebase backend + booking model + auth routing
+*   [33macc8b9c[m Phase 2: Extend Dashboards
+[1;33m|[m[1;34m\[m  
+[1;33m|[m * [33mc463a65[m Changes
+[1;33m|[m[1;33m/[m  
+* [33m8a20ddf[m Fix login auth, fix react-leaflet v5 context bug, enable citizen dashboard map
+*   [33m38d6d38[m Rework app skeleton and styling
+[1;35m|[m[1;36m\[m  
+[1;35m|[m * [33mf52377c[m Changes
+[1;35m|[m[1;35m/[m  
+* [33mb331aa1[m template: new_style_vite_react_shadcn_ts_testing_2026-01-08

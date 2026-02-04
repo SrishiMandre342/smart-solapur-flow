@@ -71,7 +71,7 @@ const CitizenDashboard: React.FC = () => {
     destinationName: string;
   } | null>(null);
 
-  const RADIUS_KM = 2.5;
+  const RADIUS_KM = 5;
 
   // Listen to parking zones from Firestore
   useEffect(() => {
