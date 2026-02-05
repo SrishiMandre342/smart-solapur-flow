@@ -130,7 +130,8 @@ const CitizenDashboard: React.FC = () => {
         distance: getDistance(currentCenter.lat, currentCenter.lng, zone.lat, zone.lng),
       }))
       .filter((zone) => zone.distance <= RADIUS_KM)
-      .sort((a, b) => a.distance - b.distance);
+       .sort((a, b) => a.distance - b.distance)
+       .slice(0, 6); // Limit to 6 nearest zones
   }, [currentCenter, parkingZones]);
 
   const nearbyTraffic = useMemo(() => {
