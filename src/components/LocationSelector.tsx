@@ -67,7 +67,7 @@ const LocationSelector: React.FC<LocationSelectorProps> = ({
               <SelectTrigger className="w-full sm:w-[220px]">
                 <SelectValue placeholder="Select location" />
               </SelectTrigger>
-              <SelectContent>
+               <SelectContent className="max-h-[280px] overflow-y-auto">
                 <SelectItem value="current">
                   <div className="flex items-center gap-2">
                     <Navigation className="w-4 h-4" />
